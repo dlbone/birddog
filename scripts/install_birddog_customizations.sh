@@ -2,7 +2,10 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-HOME_DIR="${HOME:-/home/admin}"
+INSTALL_USER="$(id -un)"
+INSTALL_GROUP="$(id -gn)"
+PASSWD_HOME="$(getent passwd "$INSTALL_USER" 2>/dev/null | cut -d: -f6 || true)"
+HOME_DIR="${PASSWD_HOME:-${HOME:-$(dirname "$REPO_DIR")}}"
 PYTHON_BIN="$REPO_DIR/birdnet/bin/python3"
 COLLAGE_DIR="$HOME_DIR/BirdSongs/Extracted/collage"
 STREAM_DIR="$HOME_DIR/BirdSongs/StreamData"
@@ -11,8 +14,6 @@ STYLE_DST="/etc/birdnet/bird_collage_style.txt"
 COLLAGE_TIMER_SRC="$REPO_DIR/templates/birdnet_collage.timer"
 COLLAGE_SERVICE_DST="/etc/systemd/system/birdnet_collage.service"
 COLLAGE_TIMER_DST="/etc/systemd/system/birdnet_collage.timer"
-INSTALL_USER="$(id -un)"
-INSTALL_GROUP="$(id -gn)"
 
 usage() {
   cat <<'EOF'

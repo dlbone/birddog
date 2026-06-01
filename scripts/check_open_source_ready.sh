@@ -104,7 +104,8 @@ done
 
 if grep -RIn "monalisa\|birddog.local\|git@github.com\|/home/admin" \
     --exclude-dir=.git --exclude-dir=birdnet \
-    README.md docs install.sh config SECURITY.md >/tmp/birddog-doc-scan.out 2>&1; then
+    README.md docs install.sh scripts/install_birddog_customizations.sh \
+    config SECURITY.md >/tmp/birddog-doc-scan.out 2>&1; then
   cat /tmp/birddog-doc-scan.out >&2
   fail "docs do not contain private/local setup leftovers"
 else
