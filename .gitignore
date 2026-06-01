@@ -28,6 +28,12 @@
 __pycache__/
 *.flac
 *.whl
+.env
+*.env.local
+gemini_api_key
+gemini_api_key.backup
+birddog-collage-cache.tgz
+birddog-birds.db
 .vscode
 installation-*.txt
 model/labels.txt

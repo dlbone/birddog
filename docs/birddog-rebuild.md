@@ -15,7 +15,8 @@ collage work so the Raspberry Pi can be rebuilt from a clean install.
   range indexes, and metadata.
 - `config/bird_collage_style.txt`: the prompt style installed to
   `/etc/birdnet/bird_collage_style.txt`.
-- `templates/home-admin-BirdSongs-StreamData.mount`: tmpfs mount for transient
+- `scripts/install_birddog_customizations.sh`: installs the dashboard extras
+  and generates user-specific systemd units for collage refresh and transient
   stream data.
 - `requirements_custom.txt`: extra Python packages needed by this install.
 
@@ -27,82 +28,69 @@ generated collage images are intentionally not treated as source code.
 Run these from the current working Pi:
 
 ```bash
-cd /home/admin/BirdNET-Pi
+cd ~/BirdNET-Pi
 git status
-git push birddog main
+# If you maintain your own fork, push your source changes before wiping the Pi.
+git push
 
-tar -czf /home/admin/birddog-collage-cache.tgz -C /home/admin/BirdSongs/Extracted/collage .
-sqlite3 /home/admin/BirdNET-Pi/scripts/birds.db ".backup '/home/admin/birddog-birds.db'"
-sudo cp /etc/birdnet/gemini_api_key /home/admin/gemini_api_key.backup
+tar -czf ~/birddog-collage-cache.tgz -C ~/BirdSongs/Extracted/collage .
+sqlite3 ~/BirdNET-Pi/scripts/birds.db ".backup '$HOME/birddog-birds.db'"
+sudo cp /etc/birdnet/gemini_api_key ~/gemini_api_key.backup
 ```
 
 Copy the three backup files somewhere off the Pi if you need the generated art,
 detection history, and Gemini key after a full rebuild:
 
-- `/home/admin/birddog-collage-cache.tgz`
-- `/home/admin/birddog-birds.db`
-- `/home/admin/gemini_api_key.backup`
+- `~/birddog-collage-cache.tgz`
+- `~/birddog-birds.db`
+- `~/gemini_api_key.backup`
 
 ## Fresh Pi Restore
 
-1. Install Raspberry Pi OS and BirdNET-Pi normally.
-2. Clone this repo or your GitHub fork:
+1. Install Raspberry Pi OS.
+2. Clone Birddog or your GitHub fork:
 
 ```bash
-cd /home/admin
-git clone https://github.com/YOUR_GITHUB_USER/birddog-birdnet-pi.git BirdNET-Pi
-cd /home/admin/BirdNET-Pi
+cd ~
+git clone https://github.com/dlbone/birddog.git BirdNET-Pi
+cd ~/BirdNET-Pi
 ```
 
-3. Restore secrets and optional cache:
+3. Restore secrets and install BirdNET-Pi plus Birddog:
 
 ```bash
-sudo mkdir -p /etc/birdnet
-sudo install -m 0600 /path/to/gemini_api_key.backup /etc/birdnet/gemini_api_key
+./install.sh --gemini-key-file /path/to/gemini_api_key.backup
+```
 
+4. Restore optional generated image cache:
+
+```bash
 scripts/install_birddog_customizations.sh --restore-cache /path/to/birddog-collage-cache.tgz
-```
-
-4. If rebuilding the Python environment too:
-
-```bash
-scripts/install_birddog_customizations.sh --install-python-deps
 ```
 
 5. Restore detection history only if you intentionally want the old DB:
 
 ```bash
-cp /path/to/birddog-birds.db /home/admin/BirdNET-Pi/scripts/birds.db
+cp /path/to/birddog-birds.db ~/BirdNET-Pi/scripts/birds.db
 ```
 
 6. Build the collage indexes:
 
 ```bash
 for h in -1 1 12 24 168 1000000; do
-  /home/admin/BirdNET-Pi/birdnet/bin/python3 /home/admin/BirdNET-Pi/scripts/bird_collage.py --hours "$h" --limit 28
+  ~/BirdNET-Pi/birdnet/bin/python3 ~/BirdNET-Pi/scripts/bird_collage.py --hours "$h" --limit 28
 done
 ```
 
-## GitHub Remote Setup
+## GitHub Fork Setup
 
-The local `origin` points at upstream BirdNET-Pi:
-
-```text
-https://github.com/Nachtzuster/BirdNET-Pi.git
-```
-
-Do not push custom work there. Create your own private GitHub repo, then add it
-as a second remote:
+If you want your own copy, fork Birddog on GitHub and set `origin` to your fork:
 
 ```bash
-cd /home/admin/BirdNET-Pi
-git remote add birddog git@github.com:YOUR_GITHUB_USER/birddog-birdnet-pi.git
-git push -u birddog main
+cd ~/BirdNET-Pi
+git remote set-url origin https://github.com/YOUR_GITHUB_USER/birddog.git
+git push -u origin main
 ```
 
-If using HTTPS instead of SSH:
-
-```bash
-git remote add birddog https://github.com/YOUR_GITHUB_USER/birddog-birdnet-pi.git
-git push -u birddog main
-```
+Keep upstream BirdNET-Pi as a separate remote only if you plan to pull upstream
+changes manually.

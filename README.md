@@ -1,115 +1,177 @@
 # Birddog
 
-Birddog is our customized BirdNET-Pi build for a Raspberry Pi bird dashboard.
-It keeps the normal BirdNET-Pi acoustic detection pipeline, then adds a live,
-visual collage interface that turns detected species into locally cached bird
-art.
+Birddog is a BirdNET-Pi fork with a field-guide style dashboard. It keeps the
+normal BirdNET-Pi acoustic detection pipeline, then adds a live collage view
+that turns detected species into locally cached bird artwork, recordings, and
+simple field notes.
 
-This repo is based on [BirdNET-Pi](https://github.com/Nachtzuster/BirdNET-Pi),
-which builds on the [BirdNET Analyzer](https://github.com/kahst/BirdNET-Analyzer).
-Respect the upstream licenses and non-commercial restrictions.
+This project is based on [BirdNET-Pi](https://github.com/Nachtzuster/BirdNET-Pi)
+and the [BirdNET Analyzer](https://github.com/kahst/BirdNET-Analyzer). Respect
+the upstream licenses and BirdNET non-commercial restrictions.
 
-## What This Version Adds
+## What Birddog Adds
 
-- A Collage view as the default dashboard.
+- Collage-first dashboard for recent visitors.
 - Time ranges: `1h`, `12h`, `TODAY`, `24h`, `7d`, and `all`.
-- Automatic species artwork generation for newly detected birds.
-- Two cached images per species: one collage cutout and one modal/detail image.
-- Alpha-mask based collage packing and hit testing.
-- Manual modal image regeneration.
-- Local image/background cleanup so cached art keeps working without AI access.
-- Rebuild docs and install helper scripts for recovering a Raspberry Pi.
+- Automatic image generation for newly detected species.
+- Two cached images per species: collage cutout and modal/detail artwork.
+- Local image cleanup, alpha-mask packing, and bird-shaped hit testing.
+- Bird modal with description, stats, recordings, inline playback, and waveform.
+- Manual image regeneration from the modal.
+- Rebuild/install helpers for bringing up a Raspberry Pi again.
 
 ## Hardware
 
-Recommended:
+Tested target:
 
 - Raspberry Pi 4 or 5.
 - 64-bit Raspberry Pi OS.
 - USB microphone or USB audio adapter.
-- Reliable power supply.
-- Network access for first setup and image generation.
+- Reliable USB-C power supply for the Pi.
+- Ethernet or Wi-Fi during setup.
+- Optional: Tailscale for remote access.
 
-BirdNET-Pi itself supports more Pi models, but this customized UI is intended
-for a modern Pi with enough headroom for the web UI and image processing.
+Notes:
 
-## Fresh Install
+- The Pi USB-C port is for power on typical Raspberry Pi 4/5 setups.
+- Plug the microphone into a USB-A port, or use a powered USB hub if you need
+  more ports or the microphone draws too much power.
+- A porch/outdoor mic placement helps, but protect the microphone from weather.
+- Image generation needs internet access only when creating new bird images.
+  Already cached images keep working offline.
 
-Start from a normal BirdNET-Pi install. For this fork, the base installer is:
+More detail: [docs/hardware.md](docs/hardware.md).
+
+## Quick Install
+
+On a fresh Raspberry Pi OS install:
 
 ```bash
-curl -s https://raw.githubusercontent.com/Nachtzuster/BirdNET-Pi/main/newinstaller.sh | bash
-```
-
-After BirdNET-Pi is installed, clone this repo or switch the install to this
-repo:
-
-```bash
-cd /home/admin
+cd ~
 git clone https://github.com/dlbone/birddog.git BirdNET-Pi
-cd /home/admin/BirdNET-Pi
+cd BirdNET-Pi
+./install.sh --check
+./install.sh
 ```
 
-If you are applying this to an existing BirdNET-Pi checkout, add the repo as a
-remote and pull the Birddog branch:
+With a Gemini key ready:
 
 ```bash
-cd /home/admin/BirdNET-Pi
-git remote add birddog git@github.com:dlbone/birddog.git
+./install.sh --gemini-key-file ~/gemini_api_key
+```
+
+The installer runs the base BirdNET-Pi install from this checkout and then
+applies the Birddog dashboard, timer, image prompt, Python dependency, and
+optional Gemini-key setup.
+`./install.sh --check` is non-destructive; it verifies prerequisites without
+prompting for sudo. If it warns that sudo credentials are not cached, the real
+install can still prompt normally.
+Advanced users can also run
+`scripts/install_birddog_customizations.sh --check` to verify only the Birddog
+customization layer.
+
+If you already installed upstream BirdNET-Pi and want to switch that checkout to
+Birddog:
+
+```bash
+cd ~/BirdNET-Pi
+git remote add birddog https://github.com/dlbone/birddog.git
 git fetch birddog
 git checkout main
 git reset --hard birddog/main
+./install.sh --skip-birdnet
 ```
 
 Only use `git reset --hard` on a fresh install or after backing up local work.
+If you fork Birddog, replace the remote URL with your fork.
 
 ## Gemini Image Key
 
-The only secret required by the collage image generator is a Gemini API key.
-Install it on the Pi at:
+The only secret Birddog needs for its custom features is a Gemini API key. It is
+used only to generate missing bird artwork. Bird detections still work without
+it.
+
+Preferred setup:
 
 ```bash
-sudo mkdir -p /etc/birdnet
-echo 'YOUR_GEMINI_API_KEY' | sudo tee /etc/birdnet/gemini_api_key >/dev/null
-sudo chmod 600 /etc/birdnet/gemini_api_key
+printf '%s\n' 'YOUR_GEMINI_API_KEY' > ~/gemini_api_key
+chmod 600 ~/gemini_api_key
+cd ~/BirdNET-Pi
+scripts/install_birddog_customizations.sh --gemini-key-file ~/gemini_api_key
 ```
 
-You can also use an environment variable:
+You can also pass the key directly:
 
 ```bash
-export GEMINI_API_KEY='YOUR_GEMINI_API_KEY'
+scripts/install_birddog_customizations.sh --gemini-key 'YOUR_GEMINI_API_KEY'
 ```
 
-The file is preferred for this install.
+The installer stores the key at:
+
+```text
+/etc/birdnet/gemini_api_key
+```
+
+with `0600` permissions. `scripts/bird_collage.py` also honors
+`GEMINI_API_KEY` for one-off command-line runs.
+See `config/birddog.env.example` for optional local environment overrides.
 
 Without a Gemini key:
 
-- Existing cached bird images still work.
-- New species still appear in the collage as text/initials.
-- New image generation and manual regeneration do not work.
+- Existing cached bird images still display.
+- New species still appear in the collage as initials/text.
+- New image generation and modal regeneration are skipped.
 
-## Apply Birddog Customizations
+## What The Installer Does
 
-Run:
+`scripts/install_birddog_customizations.sh`:
+
+- Installs the collage prompt style to `/etc/birdnet/bird_collage_style.txt`.
+- Installs the optional BirdSongs stream-data tmpfs mount.
+- Installs and enables the `birdnet_collage.timer` index/image background job.
+- Optionally installs Python dependencies from `requirements_custom.txt`.
+- Optionally installs the Gemini key.
+- Optionally restores a cached collage tarball.
+- Builds the initial collage indexes if the BirdNET virtualenv is present.
+
+Common full setup:
 
 ```bash
-cd /home/admin/BirdNET-Pi
-scripts/install_birddog_customizations.sh --install-python-deps
+cd ~/BirdNET-Pi
+./install.sh --gemini-key-file ~/gemini_api_key
 ```
 
-This installs the prompt style config, optional tmpfs mount template, Python
-dependencies, and builds the initial collage indexes.
+## Runtime Data
 
-The collage cache is stored outside the repo:
+Generated data lives outside the repo:
 
 ```text
-/home/admin/BirdSongs/Extracted/collage/
+~/BirdSongs/Extracted/collage/
 ```
 
-That folder contains generated images and JSON indexes. It is runtime data, not
-source code.
+That folder contains generated PNGs, metadata, alpha masks, and JSON indexes.
+It is runtime cache, not source code.
 
-## Access The Dashboard
+BirdNET-Pi detections live in:
+
+```text
+~/BirdNET-Pi/scripts/birds.db
+```
+
+## Live Updates
+
+The Collage page polls:
+
+```text
+scripts/collage_index.php
+```
+
+That endpoint rebuilds stale range indexes, refreshes missing metadata, and
+starts background image generation for new species. The browser updates without
+a full page refresh when species, counts, timestamps, or image availability
+change.
+
+## Access
 
 From the same network:
 
@@ -123,38 +185,40 @@ or:
 http://<pi-ip-address>
 ```
 
-If using Tailscale, use the Pi's Tailscale name or `100.x.y.z` address. Do not
-expect `.local` mDNS names to work reliably over Tailscale.
+With Tailscale, use the Pi Tailscale name or `100.x.y.z` address. Do not rely
+on `.local` mDNS names over Tailscale.
 
-The default view is the Birddog Collage.
+## Manual Collage Commands
 
-## How Live Updates Work
-
-BirdNET-Pi writes detections into:
-
-```text
-/home/admin/BirdNET-Pi/scripts/birds.db
-```
-
-The Collage page polls:
-
-```text
-scripts/collage_index.php
-```
-
-That endpoint rebuilds stale range indexes and triggers image generation for
-new species. The browser updates dynamically without a full page refresh when
-species, counts, timestamps, or image availability change.
-
-## Manual Index Build
-
-To rebuild all collage ranges:
+Rebuild all range indexes:
 
 ```bash
-cd /home/admin/BirdNET-Pi
-for h in -1 1 12 24 168 1000000; do
-  /home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py --hours "$h" --limit 28
-done
+cd ~/BirdNET-Pi
+birdnet/bin/python3 scripts/bird_collage.py --all-ranges --limit 28
+```
+
+Generate missing images for one range:
+
+```bash
+birdnet/bin/python3 scripts/bird_collage.py \
+  --hours 24 \
+  --limit 28 \
+  --generate \
+  --variant both \
+  --max-new 2
+```
+
+Regenerate one species:
+
+```bash
+birdnet/bin/python3 scripts/bird_collage.py \
+  --hours 24 \
+  --limit 28 \
+  --generate \
+  --force \
+  --variant both \
+  --max-new 2 \
+  --sci 'Cathartes aura'
 ```
 
 Range meanings:
@@ -166,66 +230,35 @@ Range meanings:
 - `168`: past 7 days.
 - `1000000`: all time.
 
-To generate missing images during a build:
+## Backup
+
+Before rebuilding a Pi, back up the runtime data you care about:
 
 ```bash
-/home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py \
-  --hours 24 \
-  --limit 28 \
-  --generate \
-  --variant both \
-  --max-new 2
-```
-
-To regenerate one species:
-
-```bash
-/home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py \
-  --hours 24 \
-  --limit 28 \
-  --generate \
-  --force \
-  --variant both \
-  --max-new 2 \
-  --sci 'Anas platyrhynchos'
-```
-
-## Backup Before Rebuilding A Pi
-
-Push repo changes:
-
-```bash
-cd /home/admin/BirdNET-Pi
+cd ~/BirdNET-Pi
+git status
 git push
-```
 
-Back up runtime data:
-
-```bash
-tar -czf /home/admin/birddog-collage-cache.tgz -C /home/admin/BirdSongs/Extracted/collage .
-sqlite3 /home/admin/BirdNET-Pi/scripts/birds.db ".backup '/home/admin/birddog-birds.db'"
-sudo cp /etc/birdnet/gemini_api_key /home/admin/gemini_api_key.backup
+tar -czf ~/birddog-collage-cache.tgz -C ~/BirdSongs/Extracted/collage .
+sqlite3 ~/BirdNET-Pi/scripts/birds.db ".backup '$HOME/birddog-birds.db'"
+sudo cp /etc/birdnet/gemini_api_key ~/gemini_api_key.backup
+sudo chown "$(id -un):$(id -gn)" ~/gemini_api_key.backup
+chmod 600 ~/gemini_api_key.backup
 ```
 
 Copy these files off the Pi:
 
-- `/home/admin/birddog-collage-cache.tgz`
-- `/home/admin/birddog-birds.db`
-- `/home/admin/gemini_api_key.backup`
+- `~/birddog-collage-cache.tgz`
+- `~/birddog-birds.db`
+- `~/gemini_api_key.backup`
 
-More detailed recovery notes are in:
-
-```text
-docs/birddog-rebuild.md
-```
-
-## Restore Runtime Data
+## Restore
 
 Restore the Gemini key:
 
 ```bash
-sudo mkdir -p /etc/birdnet
-sudo install -m 0600 gemini_api_key.backup /etc/birdnet/gemini_api_key
+cd ~/BirdNET-Pi
+scripts/install_birddog_customizations.sh --gemini-key-file /path/to/gemini_api_key.backup
 ```
 
 Restore generated bird art:
@@ -234,45 +267,25 @@ Restore generated bird art:
 scripts/install_birddog_customizations.sh --restore-cache /path/to/birddog-collage-cache.tgz
 ```
 
-Restore detection history:
+Restore detection history only if you intentionally want the old BirdNET data:
 
 ```bash
-cp /path/to/birddog-birds.db /home/admin/BirdNET-Pi/scripts/birds.db
+cp /path/to/birddog-birds.db ~/BirdNET-Pi/scripts/birds.db
 ```
 
-## Repo Remotes
+More detailed rebuild notes are in [docs/birddog-rebuild.md](docs/birddog-rebuild.md).
 
-This repo commonly has two remotes:
+## Validation
 
-```text
-origin   upstream BirdNET-Pi
-birddog  private Birddog repo
-```
-
-Check:
+Run the full non-destructive repo check:
 
 ```bash
-git remote -v
+scripts/check_open_source_ready.sh
 ```
 
-Push Birddog work to the private repo:
+GitHub Actions runs the same check on pushes and pull requests.
 
-```bash
-git push birddog main
-```
-
-If using SSH, the Pi needs a GitHub SSH key installed. If using HTTPS, use a
-GitHub personal access token with access to the private repo.
-
-## Troubleshooting
-
-Check whether image generation can read the key:
-
-```bash
-sudo test -s /etc/birdnet/gemini_api_key && echo "Gemini key installed"
-```
-
-Check PHP syntax:
+Check PHP:
 
 ```bash
 php -l scripts/collage.php
@@ -280,30 +293,29 @@ php -l scripts/collage_index.php
 php -l scripts/collage_regen.php
 ```
 
-Check Python syntax:
+Check Python:
 
 ```bash
-/home/admin/BirdNET-Pi/birdnet/bin/python3 -m py_compile scripts/bird_collage.py
+birdnet/bin/python3 -m py_compile scripts/bird_collage.py
 ```
 
-Force rebuild today's collage:
+Check the Gemini key:
 
 ```bash
-/home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py --hours -1 --limit 28
+sudo test -s /etc/birdnet/gemini_api_key && echo "Gemini key installed"
 ```
 
-If a species appears as initials first, that usually means the detection arrived
-before image generation finished. The page should update once cached images are
-available.
+Check the background timer:
 
-## Upstream BirdNET-Pi
+```bash
+systemctl --no-pager status birdnet_collage.timer
+```
 
-For core BirdNET-Pi documentation, microphone setup, BirdWeather integration,
-recording settings, and service troubleshooting, refer to upstream:
+## Development Notes
 
-- <https://github.com/Nachtzuster/BirdNET-Pi>
-- <https://github.com/mcguirepr89/BirdNET-Pi/wiki>
-
-Birddog changes the dashboard and image-generation layer. It does not change the
-basic BirdNET classifier model or the fact that acoustic detections can be
-wrong and should be reviewed before being treated as confirmed observations.
+- Source lives in the repo.
+- Generated collage assets and the Gemini key do not.
+- Keep image prompts in `config/bird_collage_style.txt`.
+- Keep Pi-specific recovery details in `docs/birddog-rebuild.md`.
+- Upstream BirdNET-Pi docs remain the source of truth for classifier setup,
+  BirdWeather, microphone tuning, and core service behavior.
