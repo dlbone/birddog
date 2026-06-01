@@ -73,7 +73,6 @@ function collage_window_label($hours) {
   <aside class="field-guide-rail" aria-label="Observation controls and summary">
     <div class="field-guide-brand">
       <span><?php echo htmlspecialchars(get_sitename()); ?> birds</span>
-      <i aria-hidden="true">aves</i>
     </div>
     <section class="field-recent">
       <div class="field-section-head"><h3>Recently heard</h3><span><?php echo htmlspecialchars($active_range['label']); ?></span></div>
