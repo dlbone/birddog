@@ -25,9 +25,13 @@
 .idea/**/dbnavigator.xml
 
 *.pyc
+__pycache__/
 *.flac
+*.whl
 .vscode
+installation-*.txt
 model/labels.txt
+model/labels_flickr.txt
 datasets/
 birdnet.conf
 IdentifiedSoFar.txt
@@ -37,6 +41,7 @@ birdnet/
 templates/*.service
 scripts/*.txt
 scripts/*.db
+scripts/__pycache__/
 analyzing_now.txt
 apprise.txt
 body.txt

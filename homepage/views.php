@@ -58,9 +58,18 @@ elseif ($config["LONGITUDE"] == "0.000") {
   <link rel="stylesheet" href="<?php echo $color_scheme . '?v=' . date('n.d.y', filemtime($color_scheme)); ?>">
 </head>
 <body>
+<?php $is_collage_view = !isset($_GET['view']) || $_GET['view'] == "Collage"; ?>
+<script>
+try {
+  if (window.parent && window.parent !== window) {
+    window.parent.document.body.classList.toggle('collage-shell', <?php echo $is_collage_view ? 'true' : 'false'; ?>);
+  }
+} catch (e) {}
+</script>
 <form action="views.php" method="GET" id="views">
-<div class="topnav" id="myTopnav">
+<div class="topnav<?php if ($is_collage_view) echo ' collage-hidden-nav'; ?>" id="myTopnav">
   <button type="submit" name="view" value="Overview" form="views">Overview</button>
+  <button type="submit" name="view" value="Collage" form="views">Collage</button>
   <button type="submit" name="view" value="Todays Detections" form="views">Today's Detections</button>
   <button type="submit" name="view" value="Spectrogram" form="views">Spectrogram</button>
   <button type="submit" name="view" value="Species Stats" form="views">Best Recordings</button>
@@ -96,7 +105,7 @@ if(window.location.search.substr(1) != '') {
     }
   }
 } else {
-  topbuttons[0].classList.add("button-hover");
+  topbuttons[1].classList.add("button-hover");
 }
 function copyOutput(elem) {
   elem.innerHTML = 'Copied!';
@@ -152,6 +161,7 @@ if(isset($_GET['view'])){
   if($_GET['view'] == "Spectrogram"){include('spectrogram.php');}
   if($_GET['view'] == "View Log"){echo "<body style=\"scroll:no;overflow-x:hidden;\"><iframe style=\"width:calc( 100% + 1em);\" src=\"log\"></iframe></body>";}
   if($_GET['view'] == "Overview"){include('overview.php');}
+  if($_GET['view'] == "Collage"){include('scripts/collage.php');}
   if($_GET['view'] == "Todays Detections"){include('todays_detections.php');}
   if($_GET['view'] == "Kiosk"){$kiosk = true;include('todays_detections.php');}
   if($_GET['view'] == "Species Stats"){include('stats.php');}
@@ -345,7 +355,7 @@ if(isset($_GET['view'])){
       }
     }
   ob_end_flush();
-} else {include('overview.php');}
+} else {include('scripts/collage.php');}
 ?>
 <script>
 function myFunction() {
