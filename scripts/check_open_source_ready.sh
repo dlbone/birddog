@@ -32,6 +32,7 @@ run_check() {
 section "Shell"
 run_check "install.sh syntax" bash -n install.sh
 run_check "customization installer syntax" bash -n scripts/install_birddog_customizations.sh
+run_check "Birddog doctor syntax" bash -n scripts/birddog_doctor.sh
 
 section "PHP"
 if command -v php >/dev/null 2>&1; then
@@ -98,7 +99,7 @@ else
 fi
 
 section "Docs"
-for file in README.md CONTRIBUTING.md docs/hardware.md SECURITY.md config/birddog.env.example; do
+for file in README.md CONTRIBUTING.md docs/hardware.md SECURITY.md config/birddog.env.example scripts/birddog_doctor.sh; do
   if [ -f "$file" ]; then
     ok "$file exists"
   else

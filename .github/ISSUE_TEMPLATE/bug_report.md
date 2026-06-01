@@ -42,15 +42,14 @@ Please paste the output of the relevant commands.
 ```bash
 cd ~/BirdNET-Pi
 git status --short --branch
+scripts/birddog_doctor.sh
 scripts/check_open_source_ready.sh
 ./install.sh --check
-systemctl --no-pager status birdnet_collage.timer
 ```
 
 For microphone or detection issues:
 
 ```bash
-arecord -l
 systemctl --no-pager status birdnet_recording birdnet_analysis birdnet_log
 ```
 

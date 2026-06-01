@@ -287,6 +287,17 @@ More detailed rebuild notes are in [docs/birddog-rebuild.md](docs/birddog-rebuil
 
 ## Validation
 
+After install, run the Birddog doctor:
+
+```bash
+cd ~/BirdNET-Pi
+scripts/birddog_doctor.sh
+```
+
+It checks the local checkout, BirdNET virtualenv, Gemini key, microphone
+visibility, core services, collage timer, runtime data folders, and local web
+endpoints without changing system state.
+
 Run the full non-destructive repo check:
 
 ```bash
