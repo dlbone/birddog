@@ -133,7 +133,7 @@ function collage_window_label($hours) {
     </nav>
     <footer class="field-guide-footer">
       <div><b>Notes</b><span>Birds are listed in order of recent detections.</span></div>
-      <div><b>Symbol key</b><span>Call detected · multiple calls · unconfirmed</span></div>
+      <div><b>Reading the plate</b><span>Larger portraits mark the most frequent visitors; smaller studies are passing notes from the microphone.</span></div>
       <div><b>Recorded by</b><span>BirdDog Audio Recorder</span></div>
     </footer>
   </main>
