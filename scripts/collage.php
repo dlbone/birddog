@@ -267,7 +267,7 @@ function collage_count_class($count) {
       <button class="bird-modal-play" type="button" data-audio="${escapeHtml(audioPath)}" aria-label="Play recording">&#9654;</button>
       <div class="bird-modal-rec-main">
         <div><b>${escapeHtml(relativeDate(`${recording.date} ${recording.time}`))}</b><span>${escapeHtml(recording.date)} &middot; ${escapeHtml(recording.time)}</span></div>
-        <canvas class="bird-modal-viz" width="320" height="34" aria-hidden="true"></canvas>
+        <canvas class="bird-modal-viz" width="320" height="34" data-audio="${escapeHtml(audioPath)}" aria-hidden="true"></canvas>
       </div>
       <strong>${confidence}%</strong>
     </div>`;
@@ -307,6 +307,7 @@ function collage_count_class($count) {
       : '<div class="bird-modal-empty">No recordings are indexed for this manual entry yet.</div>';
     modal.hidden = false;
     document.body.classList.add('modal-open');
+    initRecordingWaveforms();
     closeButton.focus();
   }
 
@@ -320,9 +321,9 @@ function collage_count_class($count) {
   let modalAudio = null;
   let modalAudioButton = null;
   let modalAudioCtx = null;
-  let modalSource = null;
-  let modalAnalyser = null;
   let modalVizFrame = 0;
+  const PLAYHEAD_VISUAL_LAG_SEC = 0.2;
+  const waveformCache = new Map();
 
   function resetRecordingRow(button) {
     if (!button) return;
@@ -333,7 +334,7 @@ function collage_count_class($count) {
     if (row) {
       row.removeAttribute('data-playing');
       const canvas = row.querySelector('.bird-modal-viz');
-      if (canvas) paintQuietViz(canvas, 0);
+      if (canvas) drawWaveformCanvas(canvas, 0);
     }
   }
 
@@ -347,67 +348,160 @@ function collage_count_class($count) {
       modalAudio.src = '';
       modalAudio = null;
     }
-    if (modalSource) {
-      try { modalSource.disconnect(); } catch (error) {}
-      modalSource = null;
-    }
-    if (modalAnalyser) {
-      try { modalAnalyser.disconnect(); } catch (error) {}
-      modalAnalyser = null;
-    }
     resetRecordingRow(modalAudioButton);
     modalAudioButton = null;
   }
 
-  function paintQuietViz(canvas, progress) {
+  function baseViz(canvas, message) {
     const ctx = canvas.getContext('2d');
     const w = canvas.width;
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#f5f4f0';
     ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(33,31,27,0.08)';
-    const bars = 28;
-    for (let i = 0; i < bars; i++) {
-      const x = Math.round((i / bars) * w);
-      const bh = 4 + ((i * 7) % 13);
-      ctx.fillRect(x, Math.round((h - bh) / 2), Math.max(2, Math.floor(w / bars) - 3), bh);
-    }
-    if (progress > 0) {
-      ctx.fillStyle = 'rgba(127,181,138,0.35)';
-      ctx.fillRect(0, 0, Math.round(w * progress), h);
+    ctx.strokeStyle = 'rgba(33,31,27,0.16)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(10, Math.round(h / 2) + 0.5);
+    ctx.lineTo(w - 10, Math.round(h / 2) + 0.5);
+    ctx.stroke();
+    if (message) {
+      ctx.fillStyle = 'rgba(33,31,27,0.42)';
+      ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(message, w / 2, h / 2);
     }
   }
 
-  function drawRecordingViz(canvas) {
-    if (!modalAnalyser || !modalAudio) return;
+  function buildEnergyLine(audioBuffer, points) {
+    const ch0 = audioBuffer.getChannelData(0);
+    const ch1 = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
+    const step = Math.max(1, Math.floor(ch0.length / points));
+    const values = new Array(points);
+    let max = 0;
+    for (let i = 0; i < points; i++) {
+      const start = i * step;
+      const end = Math.min(ch0.length, start + step);
+      let sum = 0;
+      let n = 0;
+      for (let j = start; j < end; j += 8) {
+        const sample = ch1 ? (ch0[j] + ch1[j]) * 0.5 : ch0[j];
+        sum += sample * sample;
+        n++;
+      }
+      const rms = Math.sqrt(sum / Math.max(1, n));
+      values[i] = rms;
+      if (rms > max) max = rms;
+    }
+    if (max > 0) {
+      for (let i = 0; i < values.length; i++) values[i] = Math.min(1, values[i] / max);
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 1; i < values.length - 1; i++) {
+        values[i] = (values[i - 1] + values[i] * 2 + values[i + 1]) / 4;
+      }
+    }
+    return values;
+  }
+
+  function drawWaveformCanvas(canvas, progress) {
+    const values = waveformCache.get(canvas.dataset.audio || '');
+    if (!values) {
+      baseViz(canvas, 'loading');
+      return;
+    }
     const ctx = canvas.getContext('2d');
     const w = canvas.width;
     const h = canvas.height;
-    const bins = new Uint8Array(modalAnalyser.frequencyBinCount);
+    const padX = 10;
+    const padY = 7;
+    const plotW = w - padX * 2;
+    const plotH = h - padY * 2;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#f5f4f0';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(127,181,138,0.22)';
+    ctx.fillRect(0, 0, Math.round(w * Math.max(0, Math.min(1, progress || 0))), h);
+    ctx.strokeStyle = 'rgba(33,31,27,0.14)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padX, h - padY + 0.5);
+    ctx.lineTo(w - padX, h - padY + 0.5);
+    ctx.stroke();
+    ctx.strokeStyle = '#211f1b';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    values.forEach(function(v, i) {
+      const x = padX + (i / Math.max(1, values.length - 1)) * plotW;
+      const y = h - padY - Math.pow(v, 0.72) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    const playX = padX + Math.max(0, Math.min(1, progress || 0)) * plotW;
+    ctx.strokeStyle = 'rgba(33,31,27,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(playX, padY - 1);
+    ctx.lineTo(playX, h - padY + 2);
+    ctx.stroke();
+  }
+
+  function ensureWaveform(canvas) {
+    const url = canvas && canvas.dataset.audio;
+    if (!url) return Promise.resolve();
+    if (waveformCache.has(url)) {
+      drawWaveformCanvas(canvas, 0);
+      return Promise.resolve();
+    }
+    baseViz(canvas, 'loading');
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) {
+      baseViz(canvas, 'audio preview unavailable');
+      return Promise.resolve();
+    }
+    modalAudioCtx = modalAudioCtx || new Ctx();
+    if (modalAudioCtx.state === 'suspended') {
+      modalAudioCtx.resume().catch(function() {});
+    }
+    return fetch(url, {cache: 'force-cache'})
+      .then(function(response) {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then(function(buffer) { return modalAudioCtx.decodeAudioData(buffer); })
+      .then(function(audioBuffer) {
+        waveformCache.set(url, buildEnergyLine(audioBuffer, canvas.width - 20));
+        drawWaveformCanvas(canvas, 0);
+      })
+      .catch(function(error) {
+        console.warn('waveform render failed', error);
+        baseViz(canvas, 'preview unavailable');
+      });
+  }
+
+  function initRecordingWaveforms() {
+    modalList.querySelectorAll('.bird-modal-viz').forEach(function(canvas) {
+      ensureWaveform(canvas);
+    });
+  }
+
+  function startPlayhead(canvas) {
+    if (modalVizFrame) cancelAnimationFrame(modalVizFrame);
     const tick = function() {
-      if (!modalAnalyser || !modalAudio) return;
-      modalAnalyser.getByteFrequencyData(bins);
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = '#f5f4f0';
-      ctx.fillRect(0, 0, w, h);
-      const progress = modalAudio.duration ? modalAudio.currentTime / modalAudio.duration : 0;
-      ctx.fillStyle = 'rgba(127,181,138,0.22)';
-      ctx.fillRect(0, 0, Math.round(w * progress), h);
-      const bars = 36;
-      const barW = Math.max(2, Math.floor(w / bars) - 2);
-      for (let i = 0; i < bars; i++) {
-        const idx = Math.min(bins.length - 1, Math.floor(Math.pow(i / bars, 1.7) * bins.length));
-        const v = (bins[idx] || 0) / 255;
-        const bh = Math.max(3, Math.round(v * (h - 8)));
-        const x = Math.round((i / bars) * w);
-        const y = Math.round((h - bh) / 2);
-        ctx.fillStyle = `rgba(33,31,27,${0.22 + v * 0.62})`;
-        ctx.fillRect(x, y, barW, bh);
-      }
+      if (!modalAudio || !canvas) return;
+      drawWaveformCanvas(canvas, playheadProgress());
       modalVizFrame = requestAnimationFrame(tick);
     };
     tick();
+  }
+
+  function playheadProgress() {
+    if (!modalAudio || !modalAudio.duration) return 0;
+    return Math.max(0, (modalAudio.currentTime - PLAYHEAD_VISUAL_LAG_SEC) / modalAudio.duration);
   }
 
   function playModalRecording(button) {
@@ -420,8 +514,14 @@ function collage_count_class($count) {
         button.setAttribute('aria-label', 'Pause recording');
         const row = button.closest('.bird-modal-recording');
         if (row) row.setAttribute('data-playing', 'true');
+        const canvas = row && row.querySelector('.bird-modal-viz');
+        if (canvas) startPlayhead(canvas);
       } else {
         modalAudio.pause();
+        if (modalVizFrame) {
+          cancelAnimationFrame(modalVizFrame);
+          modalVizFrame = 0;
+        }
         button.innerHTML = '&#9654;';
         button.removeAttribute('data-playing');
         button.setAttribute('aria-label', 'Play recording');
@@ -448,32 +548,17 @@ function collage_count_class($count) {
       window.setTimeout(function() { resetRecordingRow(button); }, 1400);
     });
     modalAudio.addEventListener('timeupdate', function() {
-      if (!canvas || modalAnalyser) return;
-      paintQuietViz(canvas, modalAudio.duration ? modalAudio.currentTime / modalAudio.duration : 0);
+      if (!canvas) return;
+      drawWaveformCanvas(canvas, playheadProgress());
     });
 
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx && canvas) {
-        modalAudioCtx = modalAudioCtx || new Ctx();
-        if (modalAudioCtx.state === 'suspended') modalAudioCtx.resume();
-        modalSource = modalAudioCtx.createMediaElementSource(modalAudio);
-        modalAnalyser = modalAudioCtx.createAnalyser();
-        modalAnalyser.fftSize = 256;
-        modalAnalyser.smoothingTimeConstant = 0.72;
-        modalSource.connect(modalAnalyser);
-        modalAnalyser.connect(modalAudioCtx.destination);
-        drawRecordingViz(canvas);
-      }
-    } catch (error) {
-      modalAnalyser = null;
-      if (canvas) paintQuietViz(canvas, 0);
-    }
-
-    modalAudio.play().catch(function(error) {
-      console.warn('recording play failed', error);
-      stopModalAudio();
-    });
+    Promise.resolve(canvas ? ensureWaveform(canvas) : null)
+      .then(function() { return modalAudio.play(); })
+      .then(function() { if (canvas) startPlayhead(canvas); })
+      .catch(function(error) {
+        console.warn('recording play failed', error);
+        stopModalAudio();
+      });
   }
 
   function render(payload) {

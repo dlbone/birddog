@@ -737,6 +737,10 @@ button:hover {
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
 }
 
+.bird-modal-recording:last-child {
+  border-bottom: 0;
+}
+
 .bird-modal-play {
   width: 28px;
   height: 28px;
