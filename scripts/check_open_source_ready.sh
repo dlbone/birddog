@@ -111,11 +111,11 @@ fi
 if grep -RIn "monalisa\|birddog.local\|git@github.com\|/home/admin" \
     --exclude-dir=.git --exclude-dir=birdnet \
     README.md docs install.sh scripts/install_birddog_customizations.sh \
-    config SECURITY.md .github/ISSUE_TEMPLATE >/tmp/birddog-doc-scan.out 2>&1; then
+    templates config SECURITY.md .github/ISSUE_TEMPLATE >/tmp/birddog-doc-scan.out 2>&1; then
   cat /tmp/birddog-doc-scan.out >&2
-  fail "docs do not contain private/local setup leftovers"
+  fail "public setup files do not contain private/local leftovers"
 else
-  ok "docs do not contain private/local setup leftovers"
+  ok "public setup files do not contain private/local leftovers"
 fi
 rm -f /tmp/birddog-doc-scan.out
 
