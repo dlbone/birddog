@@ -1,183 +1,309 @@
-<h1 align="center"><a href="https://github.com/mcguirepr89/BirdNET-Pi/blob/main/LICENSE">Review the license!!</a></h1>
-<h1 align="center">You may not use BirdNET-Pi to develop a commercial product!!!!</h1>
-<h1 align="center">
-  BirdNET-Pi
-</h1>
-<p align="center">
-A realtime acoustic bird classification system for the Raspberry Pi 5, 4B, 400, 3B+, and 0W2
-</p>
-<p align="center">
-  <img src="https://user-images.githubusercontent.com/60325264/140656397-bf76bad4-f110-467c-897d-992ff0f96476.png" />
-</p>
-<p align="center">
-Icon made by <a href="https://www.freepik.com" title="Freepik">Freepik</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a>
-</p>
+# Birddog
 
-## About this fork:
-I've been building on [mcguirepr89's](https://github.com/mcguirepr89/BirdNET-Pi) most excellent work to further update and improve BirdNET-Pi. Maybe someone will find it useful.
+Birddog is our customized BirdNET-Pi build for a Raspberry Pi bird dashboard.
+It keeps the normal BirdNET-Pi acoustic detection pipeline, then adds a live,
+visual collage interface that turns detected species into locally cached bird
+art.
 
-Changes include:
+This repo is based on [BirdNET-Pi](https://github.com/Nachtzuster/BirdNET-Pi),
+which builds on the [BirdNET Analyzer](https://github.com/kahst/BirdNET-Analyzer).
+Respect the upstream licenses and non-commercial restrictions.
 
- - Backup & Restore
- - Web ui is much more responsive
- - Daily charts now include all species, not just top/bottom 10
- - Bump apprise version, so more notification type are possible
- - Swipe events on Daily Charts (by @croisez)
- - Support for 'Species range model V2.4 - V2'
- - Bookworm and Trixie support
- - Experimental support for writing transient files to tmpfs
- - Rework analysis to consolidate analysis/server/extraction. Should make analysis more robust and slightly more efficient, especially on installations with a large number of recordings
- - Bump tflite_runtime to 2.17.1, it is faster
- - Rework daily_plot.py (chart_viewer) to run as a daemon to avoid the very expensive startup
- - Lots of fixes & cleanups
+## What This Version Adds
 
-!! note: see 'Migrating' on how to migrate from mcguirepr89
+- A Collage view as the default dashboard.
+- Time ranges: `1h`, `12h`, `TODAY`, `24h`, `7d`, and `all`.
+- Automatic species artwork generation for newly detected birds.
+- Two cached images per species: one collage cutout and one modal/detail image.
+- Alpha-mask based collage packing and hit testing.
+- Manual modal image regeneration.
+- Local image/background cleanup so cached art keeps working without AI access.
+- Rebuild docs and install helper scripts for recovering a Raspberry Pi.
 
-## Introduction
-BirdNET-Pi is built on the [BirdNET framework](https://github.com/kahst/BirdNET-Analyzer) by [**@kahst**](https://github.com/kahst) <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/"><img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg"></a> using [pre-built TFLite binaries](https://github.com/PINTO0309/TensorflowLite-bin) by [**@PINTO0309**](https://github.com/PINTO0309) . It is able to recognize bird sounds from a USB microphone or sound card in realtime and share its data with the rest of the world.
+## Hardware
 
-Check out birds from around the world
-- [BirdWeather](https://app.birdweather.com)<br>
+Recommended:
 
-## Features
-* **24/7 recording and automatic identification** of bird songs, chirps, and peeps using BirdNET machine learning
-* **Automatic extraction and cataloguing** of bird clips from full-length recordings
-* **Tools to visualize your recorded bird data** and analyze trends
-* **Live audio stream and spectrogram**
-* **Automatic disk space management** that periodically purges old audio files
-* [BirdWeather](https://app.birdweather.com) integration -- you can request a BirdWeather ID from BirdNET-Pi's "Tools" > "Settings" page
-* Web interface access to all data and logs provided by [Caddy](https://caddyserver.com)
-* [GoTTY](https://github.com/yudai/gotty) and [GoTTY x86](https://github.com/sorenisanerd/gotty) Web Terminal
-* [Tiny File Manager](https://tinyfilemanager.github.io/)
-* FTP server included
-* SQLite3 Database
-* [Adminer](https://www.adminer.org/) database maintenance
-* [phpSysInfo](https://github.com/phpsysinfo/phpsysinfo)
-* [Apprise Notifications](https://github.com/caronc/apprise) supporting 90+ notification platforms
-* Localization supported
+- Raspberry Pi 4 or 5.
+- 64-bit Raspberry Pi OS.
+- USB microphone or USB audio adapter.
+- Reliable power supply.
+- Network access for first setup and image generation.
 
-## Requirements
-* A Raspberry Pi 5, Raspberry 4B, Raspberry Pi 400, Raspberry Pi 3B+, or Raspberry Pi 0W2 (The 3B+ and 0W2 must run on RaspiOS-ARM64-**Lite**)
-* An SD Card with the **_64-bit version of RaspiOS_** installed (please use Trixie) -- Lite is recommended, but the installation works on RaspiOS-ARM64-Full as well. Downloads available within the [Raspberry Pi Imager](https://www.raspberrypi.com/software/).
-* A USB Microphone or Sound Card
+BirdNET-Pi itself supports more Pi models, but this customized UI is intended
+for a modern Pi with enough headroom for the web UI and image processing.
 
-## Installation
-[A comprehensive installation guide is available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Installation-Guide). This guide is slightly out-dated: make sure to pick Bookworm, also the curl command is still pointing to mcguirepr89's repo.
+## Fresh Install
 
-Please note that installing BirdNET-Pi on top of other servers is not supported. If this is something that you require, please open a discussion for your idea and inquire about how to contribute to development.
+Start from a normal BirdNET-Pi install. For this fork, the base installer is:
 
-[Raspberry Pi 3B[+] and 0W2 installation guide available here](https://github.com/mcguirepr89/BirdNET-Pi/wiki/RPi0W2-Installation-Guide)
-
-The system can be installed with:
-```
+```bash
 curl -s https://raw.githubusercontent.com/Nachtzuster/BirdNET-Pi/main/newinstaller.sh | bash
 ```
-The installer takes care of any and all necessary updates, so you can run that as the very first command upon the first boot, if you'd like.
 
-The installation creates a log in `$HOME/installation-$(date "+%F").txt`.
-## Access
-The BirdNET-Pi can be accessed from any web browser on the same network:
-- http://birdnetpi.local OR your Pi's IP address
-- Default Basic Authentication Username: birdnet
-- Password is empty by default. Set this in "Tools" > "Settings" > "Advanced Settings"
+After BirdNET-Pi is installed, clone this repo or switch the install to this
+repo:
 
-Please take a look at the [wiki](https://github.com/mcguirepr89/BirdNET-Pi/wiki) and [discussions](https://github.com/mcguirepr89/BirdNET-Pi/discussions) for information on
-- [BirdNET-Pi's Deep Convolutional Neural Network(s)](https://github.com/mcguirepr89/BirdNET-Pi/wiki/BirdNET-Pi:-some-theory-on-classification-&-some-practical-hints)
-- [making your installation public](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Sharing-Your-BirdNET-Pi)
-- [backing up and restoring your database](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Backup-and-Restore-the-Database)
-- [adjusting your sound card settings](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Adjusting-your-sound-card)
-- [suggested USB microphones](https://github.com/mcguirepr89/BirdNET-Pi/discussions/39)
-- [building your own microphone](https://github.com/DD4WH/SASS/wiki/Stereo--(Mono)-recording-low-noise-low-cost-system)
-- [privacy concerns and options](https://github.com/mcguirepr89/BirdNET-Pi/discussions/166)
-- [beta testing](https://github.com/mcguirepr89/BirdNET-Pi/discussions/11)
-- [and more!](https://github.com/mcguirepr89/BirdNET-Pi/discussions)
-
-
-## Updating 
-
-Use the web interface and go to "Tools" > "System Controls" > "Update". If you encounter any issues with that, or suspect that the update did not work for some reason, please save its output and post it in an issue where we can help.
-
-## Backup and Restore
-Use the web interface and go to "Tools" > "System Controls" > "Backup" or "Restore". Backup/Restore is primary meant for migrating your data for one system to another. Since the time required to create or restore a backup depends on the size of the data set and the speed of the storage, this could take quite a while.
-
-Alternatively, the backup script can be used directly. These examples assume the backup medium is mounted on `/mnt`
-
-To backup:
-```commandline
-./scripts/backup_data.sh -a backup -f /mnt/birds/backup-2024-07-09.tar
-```
-To restore:
-```commandline
-./scripts/backup_data.sh -a restore -f /mnt/birds/backup-2024-07-09.tar
+```bash
+cd /home/admin
+git clone https://github.com/dlbone/birddog.git BirdNET-Pi
+cd /home/admin/BirdNET-Pi
 ```
 
-## x86_64 support
-x86_64 support is mainly there for developers or otherwise more Linux savvy people.
-That being said, some pointers:
-- Use Debian 12 or 13
-- The user needs passwordless sudo
+If you are applying this to an existing BirdNET-Pi checkout, add the repo as a
+remote and pull the Birddog branch:
 
-For Proxmox, a user has reported adding this in their `cpu-models.conf`, in order for the custom TFLite build to work.
-```
-cpu-model: BirdNet
-    flags +sse4.1
-    reported-model host
+```bash
+cd /home/admin/BirdNET-Pi
+git remote add birddog git@github.com:dlbone/birddog.git
+git fetch birddog
+git checkout main
+git reset --hard birddog/main
 ```
 
-## Uninstallation
+Only use `git reset --hard` on a fresh install or after backing up local work.
+
+## Gemini Image Key
+
+The only secret required by the collage image generator is a Gemini API key.
+Install it on the Pi at:
+
+```bash
+sudo mkdir -p /etc/birdnet
+echo 'YOUR_GEMINI_API_KEY' | sudo tee /etc/birdnet/gemini_api_key >/dev/null
+sudo chmod 600 /etc/birdnet/gemini_api_key
 ```
-/usr/local/bin/uninstall.sh && cd ~ && rm -drf BirdNET-Pi
+
+You can also use an environment variable:
+
+```bash
+export GEMINI_API_KEY='YOUR_GEMINI_API_KEY'
 ```
-## Migrating
-Before switching, make sure your installation is fully up-to-date. Also make sure to have a backup, that is also the only way to get back to the original BirdNET-Pi.
-Please note that upgrading your underlying OS to Bookworm is not going to work. Please stick to Bullseye. If you do want Bookworm, you need to start from a fresh install and copy back your data. (remember the backup!)
 
-Run these commands to migrate to this repo:
+The file is preferred for this install.
+
+Without a Gemini key:
+
+- Existing cached bird images still work.
+- New species still appear in the collage as text/initials.
+- New image generation and manual regeneration do not work.
+
+## Apply Birddog Customizations
+
+Run:
+
+```bash
+cd /home/admin/BirdNET-Pi
+scripts/install_birddog_customizations.sh --install-python-deps
 ```
-git remote remove origin
-git remote add origin https://github.com/Nachtzuster/BirdNET-Pi.git
-./scripts/update_birdnet.sh
+
+This installs the prompt style config, optional tmpfs mount template, Python
+dependencies, and builds the initial collage indexes.
+
+The collage cache is stored outside the repo:
+
+```text
+/home/admin/BirdSongs/Extracted/collage/
 ```
-## Troubleshooting and Ideas
-*Hint: A lot of weird problems can be solved by simply restarting the core services. Do this from the web interface "Tools" > "Services" > "Restart Core Services"
-Having trouble or have an idea? *Submit an issue for trouble* and a *discussion for ideas*. Please do *not* submit an issue as a discussion -- the issue tracker solicits information that is needed for anyone to help -- discussions are *not for issues*.
 
-PLEASE search the repo for your issue before creating a new one. This repo has nothing to do with the validity of the detection results, so please do not start any issues around "False positives."
+That folder contains generated images and JSON indexes. It is runtime data, not
+source code.
 
-## Sharing
-Please join a Discussion!! and please join [BirdWeather!!](https://app.birdweather.com)
-I hope that if you find BirdNET-Pi has been worth your time, you will share your setup, results, customizations, etc. [HERE](https://github.com/mcguirepr89/BirdNET-Pi/discussions/69) and will consider [making your installation public](https://github.com/mcguirepr89/BirdNET-Pi/wiki/Sharing-Your-BirdNET-Pi).
+## Access The Dashboard
 
-## Homeassistant addon
+From the same network:
 
-BirdNET-Pi can also be run as a [Homeassistant](https://www.home-assistant.io/) addon through docker.
-For more information : https://github.com/alexbelgium/hassio-addons/blob/master/birdnet-pi/README.md
+```text
+http://birdnetpi.local
+```
 
-## Docker
+or:
 
-BirdNET-Pi can also be run as as a docker container.
-For more information : https://github.com/alexbelgium/hassio-addons/blob/master/birdnet-pi/README_standalone.md
+```text
+http://<pi-ip-address>
+```
 
-## Cool Links
+If using Tailscale, use the Pi's Tailscale name or `100.x.y.z` address. Do not
+expect `.local` mDNS names to work reliably over Tailscale.
 
-- [Marie Lelouche's <i>Out of Spaces</i>](https://www.lestanneries.fr/exposition/marie-lelouche-out-of-spaces/) using BirdNET-Pi in post-sculpture VR! [Press Kit](https://github.com/mcguirepr89/BirdNET-Pi-assets/blob/main/dp_out_of_spaces_marie_lelouche_digital_05_01_22.pdf)
-- [Research on noded BirdNET-Pi networks for farming](https://github.com/mcguirepr89/BirdNET-Pi-assets/blob/main/G23_Report_ModelBasedSysEngineering_FarmMarkBirdDetector_V1__Copy_.pdf)
-- [PixCams Build Guide](https://pixcams.com/building-a-birdnet-pi-real-time-acoustic-bird-id-station/)
-- [Core-Electronics](https://core-electronics.com.au/projects/bird-calls-raspberry-pi) Build Article
-- [RaspberryPi.com Blog Post](https://www.raspberrypi.com/news/classify-birds-acoustically-with-birdnet-pi/)
-- [MagPi Issue 119 Showcase Article](https://magpi.raspberrypi.com/issues/119/pdf)
+The default view is the Birddog Collage.
 
+## How Live Updates Work
 
-### Internationalization:
-The bird names are in English by default, but other localized versions are available thanks to the wonderful efforts of [@patlevin](https://github.com/patlevin) and Wikipedia. Use the web interface's "Tools" > "Settings" and select your "Database Language" to have the detections in your language.
+BirdNET-Pi writes detections into:
 
-[Internationalization](docs/translations.md)
+```text
+/home/admin/BirdNET-Pi/scripts/birds.db
+```
 
+The Collage page polls:
 
-## Screenshots
-![Overview](docs/overview.png)
-![Spectrogram](docs/spectrogram.png)
+```text
+scripts/collage_index.php
+```
 
+That endpoint rebuilds stale range indexes and triggers image generation for
+new species. The browser updates dynamically without a full page refresh when
+species, counts, timestamps, or image availability change.
 
-## :thinking:
-Are you a lucky ducky with a spare Raspberry Pi? [Try Folding@home!](https://foldingathome.org/)
+## Manual Index Build
+
+To rebuild all collage ranges:
+
+```bash
+cd /home/admin/BirdNET-Pi
+for h in -1 1 12 24 168 1000000; do
+  /home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py --hours "$h" --limit 28
+done
+```
+
+Range meanings:
+
+- `-1`: today since local midnight.
+- `1`: past hour.
+- `12`: past 12 hours.
+- `24`: past 24 hours.
+- `168`: past 7 days.
+- `1000000`: all time.
+
+To generate missing images during a build:
+
+```bash
+/home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py \
+  --hours 24 \
+  --limit 28 \
+  --generate \
+  --variant both \
+  --max-new 2
+```
+
+To regenerate one species:
+
+```bash
+/home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py \
+  --hours 24 \
+  --limit 28 \
+  --generate \
+  --force \
+  --variant both \
+  --max-new 2 \
+  --sci 'Anas platyrhynchos'
+```
+
+## Backup Before Rebuilding A Pi
+
+Push repo changes:
+
+```bash
+cd /home/admin/BirdNET-Pi
+git push
+```
+
+Back up runtime data:
+
+```bash
+tar -czf /home/admin/birddog-collage-cache.tgz -C /home/admin/BirdSongs/Extracted/collage .
+sqlite3 /home/admin/BirdNET-Pi/scripts/birds.db ".backup '/home/admin/birddog-birds.db'"
+sudo cp /etc/birdnet/gemini_api_key /home/admin/gemini_api_key.backup
+```
+
+Copy these files off the Pi:
+
+- `/home/admin/birddog-collage-cache.tgz`
+- `/home/admin/birddog-birds.db`
+- `/home/admin/gemini_api_key.backup`
+
+More detailed recovery notes are in:
+
+```text
+docs/birddog-rebuild.md
+```
+
+## Restore Runtime Data
+
+Restore the Gemini key:
+
+```bash
+sudo mkdir -p /etc/birdnet
+sudo install -m 0600 gemini_api_key.backup /etc/birdnet/gemini_api_key
+```
+
+Restore generated bird art:
+
+```bash
+scripts/install_birddog_customizations.sh --restore-cache /path/to/birddog-collage-cache.tgz
+```
+
+Restore detection history:
+
+```bash
+cp /path/to/birddog-birds.db /home/admin/BirdNET-Pi/scripts/birds.db
+```
+
+## Repo Remotes
+
+This repo commonly has two remotes:
+
+```text
+origin   upstream BirdNET-Pi
+birddog  private Birddog repo
+```
+
+Check:
+
+```bash
+git remote -v
+```
+
+Push Birddog work to the private repo:
+
+```bash
+git push birddog main
+```
+
+If using SSH, the Pi needs a GitHub SSH key installed. If using HTTPS, use a
+GitHub personal access token with access to the private repo.
+
+## Troubleshooting
+
+Check whether image generation can read the key:
+
+```bash
+sudo test -s /etc/birdnet/gemini_api_key && echo "Gemini key installed"
+```
+
+Check PHP syntax:
+
+```bash
+php -l scripts/collage.php
+php -l scripts/collage_index.php
+php -l scripts/collage_regen.php
+```
+
+Check Python syntax:
+
+```bash
+/home/admin/BirdNET-Pi/birdnet/bin/python3 -m py_compile scripts/bird_collage.py
+```
+
+Force rebuild today's collage:
+
+```bash
+/home/admin/BirdNET-Pi/birdnet/bin/python3 scripts/bird_collage.py --hours -1 --limit 28
+```
+
+If a species appears as initials first, that usually means the detection arrived
+before image generation finished. The page should update once cached images are
+available.
+
+## Upstream BirdNET-Pi
+
+For core BirdNET-Pi documentation, microphone setup, BirdWeather integration,
+recording settings, and service troubleshooting, refer to upstream:
+
+- <https://github.com/Nachtzuster/BirdNET-Pi>
+- <https://github.com/mcguirepr89/BirdNET-Pi/wiki>
+
+Birddog changes the dashboard and image-generation layer. It does not change the
+basic BirdNET classifier model or the fact that acoustic detections can be
+wrong and should be reviewed before being treated as confirmed observations.
