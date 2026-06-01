@@ -102,10 +102,16 @@ for file in README.md CONTRIBUTING.md docs/hardware.md SECURITY.md config/birddo
   fi
 done
 
+if [ ! -f .github/FUNDING.yml ]; then
+  ok "no placeholder funding metadata"
+else
+  fail "no placeholder funding metadata"
+fi
+
 if grep -RIn "monalisa\|birddog.local\|git@github.com\|/home/admin" \
     --exclude-dir=.git --exclude-dir=birdnet \
     README.md docs install.sh scripts/install_birddog_customizations.sh \
-    config SECURITY.md >/tmp/birddog-doc-scan.out 2>&1; then
+    config SECURITY.md .github/ISSUE_TEMPLATE >/tmp/birddog-doc-scan.out 2>&1; then
   cat /tmp/birddog-doc-scan.out >&2
   fail "docs do not contain private/local setup leftovers"
 else

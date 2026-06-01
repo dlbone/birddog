@@ -1,44 +1,60 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a Birddog install, dashboard, image, or playback problem
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
-### PLEASE READ THE DOCUMENTATION BEFORE SUBMITTING AN ISSUE
-**Describe the bug**
-A clear and concise description of what the bug is.
+## What happened?
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+Describe the problem and what you expected instead.
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## Where did it happen?
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+- [ ] Fresh install
+- [ ] Upgrade from upstream BirdNET-Pi
+- [ ] Collage/dashboard
+- [ ] Modal/recording playback
+- [ ] Image generation or regeneration
+- [ ] Microphone/detection pipeline
 
-**Additional context**
-Add any other context about the problem or your installation here.
+## Hardware
 
-**Your build**
-The hardware on which BirdNET-Pi is running goes here.
+- Raspberry Pi model:
+- OS/version:
+- Microphone or USB audio adapter:
+- Storage size/type:
+- Network: Ethernet / Wi-Fi / Tailscale / other
 
-**Code or log snippets**
-The installation creates a log in `~/`, please include it where applicable.
-<details>
-<summary>log or code</summary>
+## Setup
 
+- Install command used:
+- Birddog commit:
+- Browser/device:
+- Gemini key installed? yes / no / not sure
+
+## Checks
+
+Please paste the output of the relevant commands.
+
+```bash
+cd ~/BirdNET-Pi
+git status --short --branch
+scripts/check_open_source_ready.sh
+./install.sh --check
+systemctl --no-pager status birdnet_collage.timer
 ```
-Paste your 
-log output 
-or 
-code here
+
+For microphone or detection issues:
+
+```bash
+arecord -l
+systemctl --no-pager status birdnet_recording birdnet_analysis birdnet_log
 ```
-</details>
+
+## Screenshots or logs
+
+Screenshots of the dashboard/modal help. For logs, paste only the relevant
+section and remove secrets such as API keys, passwords, and public tunnel URLs.
