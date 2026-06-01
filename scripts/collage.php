@@ -260,9 +260,15 @@ function collage_count_class($count) {
 
   function recordingMarkup(recording) {
     const confidence = Math.round(Number(recording.confidence || 0) * 100);
+    const folder = String(recording.file_name || '').split('-')[0] || '';
+    const comFolder = String(recording.file_name || '').replace(/-\d+-.*$/, '') || folder;
+    const audioPath = `/By_Date/${encodeURIComponent(recording.date || '')}/${encodeURIComponent(comFolder)}/${encodeURIComponent(recording.file_name || '')}`;
     return `<div class="bird-modal-recording">
-      <a class="bird-modal-play" href="/views.php?view=Recordings&filename=${encodeURIComponent(recording.file_name || '')}" target="_top">&#9654;</a>
-      <div><b>${escapeHtml(relativeDate(`${recording.date} ${recording.time}`))}</b><span>${escapeHtml(recording.date)} &middot; ${escapeHtml(recording.time)}</span></div>
+      <button class="bird-modal-play" type="button" data-audio="${escapeHtml(audioPath)}" aria-label="Play recording">&#9654;</button>
+      <div class="bird-modal-rec-main">
+        <div><b>${escapeHtml(relativeDate(`${recording.date} ${recording.time}`))}</b><span>${escapeHtml(recording.date)} &middot; ${escapeHtml(recording.time)}</span></div>
+        <canvas class="bird-modal-viz" width="320" height="34" aria-hidden="true"></canvas>
+      </div>
       <strong>${confidence}%</strong>
     </div>`;
   }
@@ -275,6 +281,7 @@ function collage_count_class($count) {
   }
 
   function openModal(idx) {
+    stopModalAudio();
     const bird = currentBirds[idx];
     if (!bird) return;
     activeModalSci = bird.sci_name || '';
@@ -304,9 +311,169 @@ function collage_count_class($count) {
   }
 
   function closeModal() {
+    stopModalAudio();
     modal.hidden = true;
     activeModalSci = '';
     document.body.classList.remove('modal-open');
+  }
+
+  let modalAudio = null;
+  let modalAudioButton = null;
+  let modalAudioCtx = null;
+  let modalSource = null;
+  let modalAnalyser = null;
+  let modalVizFrame = 0;
+
+  function resetRecordingRow(button) {
+    if (!button) return;
+    const row = button.closest('.bird-modal-recording');
+    button.innerHTML = '&#9654;';
+    button.setAttribute('aria-label', 'Play recording');
+    button.removeAttribute('data-playing');
+    if (row) {
+      row.removeAttribute('data-playing');
+      const canvas = row.querySelector('.bird-modal-viz');
+      if (canvas) paintQuietViz(canvas, 0);
+    }
+  }
+
+  function stopModalAudio() {
+    if (modalVizFrame) {
+      cancelAnimationFrame(modalVizFrame);
+      modalVizFrame = 0;
+    }
+    if (modalAudio) {
+      try { modalAudio.pause(); } catch (error) {}
+      modalAudio.src = '';
+      modalAudio = null;
+    }
+    if (modalSource) {
+      try { modalSource.disconnect(); } catch (error) {}
+      modalSource = null;
+    }
+    if (modalAnalyser) {
+      try { modalAnalyser.disconnect(); } catch (error) {}
+      modalAnalyser = null;
+    }
+    resetRecordingRow(modalAudioButton);
+    modalAudioButton = null;
+  }
+
+  function paintQuietViz(canvas, progress) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#f5f4f0';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(33,31,27,0.08)';
+    const bars = 28;
+    for (let i = 0; i < bars; i++) {
+      const x = Math.round((i / bars) * w);
+      const bh = 4 + ((i * 7) % 13);
+      ctx.fillRect(x, Math.round((h - bh) / 2), Math.max(2, Math.floor(w / bars) - 3), bh);
+    }
+    if (progress > 0) {
+      ctx.fillStyle = 'rgba(127,181,138,0.35)';
+      ctx.fillRect(0, 0, Math.round(w * progress), h);
+    }
+  }
+
+  function drawRecordingViz(canvas) {
+    if (!modalAnalyser || !modalAudio) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const bins = new Uint8Array(modalAnalyser.frequencyBinCount);
+    const tick = function() {
+      if (!modalAnalyser || !modalAudio) return;
+      modalAnalyser.getByteFrequencyData(bins);
+      ctx.clearRect(0, 0, w, h);
+      ctx.fillStyle = '#f5f4f0';
+      ctx.fillRect(0, 0, w, h);
+      const progress = modalAudio.duration ? modalAudio.currentTime / modalAudio.duration : 0;
+      ctx.fillStyle = 'rgba(127,181,138,0.22)';
+      ctx.fillRect(0, 0, Math.round(w * progress), h);
+      const bars = 36;
+      const barW = Math.max(2, Math.floor(w / bars) - 2);
+      for (let i = 0; i < bars; i++) {
+        const idx = Math.min(bins.length - 1, Math.floor(Math.pow(i / bars, 1.7) * bins.length));
+        const v = (bins[idx] || 0) / 255;
+        const bh = Math.max(3, Math.round(v * (h - 8)));
+        const x = Math.round((i / bars) * w);
+        const y = Math.round((h - bh) / 2);
+        ctx.fillStyle = `rgba(33,31,27,${0.22 + v * 0.62})`;
+        ctx.fillRect(x, y, barW, bh);
+      }
+      modalVizFrame = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  function playModalRecording(button) {
+    if (!button) return;
+    if (button === modalAudioButton && modalAudio) {
+      if (modalAudio.paused) {
+        modalAudio.play().catch(function(error) { console.warn('recording play failed', error); });
+        button.innerHTML = '&#10074;&#10074;';
+        button.setAttribute('data-playing', 'true');
+        button.setAttribute('aria-label', 'Pause recording');
+        const row = button.closest('.bird-modal-recording');
+        if (row) row.setAttribute('data-playing', 'true');
+      } else {
+        modalAudio.pause();
+        button.innerHTML = '&#9654;';
+        button.removeAttribute('data-playing');
+        button.setAttribute('aria-label', 'Play recording');
+        const row = button.closest('.bird-modal-recording');
+        if (row) row.removeAttribute('data-playing');
+      }
+      return;
+    }
+
+    stopModalAudio();
+    const row = button.closest('.bird-modal-recording');
+    const canvas = row && row.querySelector('.bird-modal-viz');
+    modalAudioButton = button;
+    modalAudio = new Audio(button.dataset.audio || '');
+    button.innerHTML = '&#10074;&#10074;';
+    button.setAttribute('data-playing', 'true');
+    button.setAttribute('aria-label', 'Pause recording');
+    if (row) row.setAttribute('data-playing', 'true');
+
+    modalAudio.addEventListener('ended', stopModalAudio);
+    modalAudio.addEventListener('error', function() {
+      resetRecordingRow(button);
+      button.innerHTML = '!';
+      window.setTimeout(function() { resetRecordingRow(button); }, 1400);
+    });
+    modalAudio.addEventListener('timeupdate', function() {
+      if (!canvas || modalAnalyser) return;
+      paintQuietViz(canvas, modalAudio.duration ? modalAudio.currentTime / modalAudio.duration : 0);
+    });
+
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx && canvas) {
+        modalAudioCtx = modalAudioCtx || new Ctx();
+        if (modalAudioCtx.state === 'suspended') modalAudioCtx.resume();
+        modalSource = modalAudioCtx.createMediaElementSource(modalAudio);
+        modalAnalyser = modalAudioCtx.createAnalyser();
+        modalAnalyser.fftSize = 256;
+        modalAnalyser.smoothingTimeConstant = 0.72;
+        modalSource.connect(modalAnalyser);
+        modalAnalyser.connect(modalAudioCtx.destination);
+        drawRecordingViz(canvas);
+      }
+    } catch (error) {
+      modalAnalyser = null;
+      if (canvas) paintQuietViz(canvas, 0);
+    }
+
+    modalAudio.play().catch(function(error) {
+      console.warn('recording play failed', error);
+      stopModalAudio();
+    });
   }
 
   function render(payload) {
@@ -437,6 +604,13 @@ function collage_count_class($count) {
 
   closeButton.addEventListener('click', closeModal);
   modal.addEventListener('click', function(event) {
+    const play = event.target.closest && event.target.closest('.bird-modal-play');
+    if (play) {
+      event.preventDefault();
+      event.stopPropagation();
+      playModalRecording(play);
+      return;
+    }
     const regen = event.target.closest && event.target.closest('.regen-image-btn');
     if (regen) {
       event.preventDefault();
