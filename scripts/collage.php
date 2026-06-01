@@ -75,16 +75,6 @@ function collage_window_label($hours) {
       <span><?php echo htmlspecialchars(get_sitename()); ?> birds</span>
       <i aria-hidden="true">aves</i>
     </div>
-    <section>
-      <h3>Observation window</h3>
-      <nav class="collage-range" aria-label="Observation window">
-        <?php foreach ($range_options as $option) {
-          $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
-          $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
-          echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
-        } ?>
-      </nav>
-    </section>
     <section class="field-recent">
       <div class="field-section-head"><h3>Recently heard</h3><span><?php echo htmlspecialchars($active_range['label']); ?></span></div>
       <ol class="field-recent-list">
@@ -134,6 +124,13 @@ function collage_window_label($hours) {
           }
         } ?>
     </div>
+    <nav class="collage-range" aria-label="Observation window">
+      <?php foreach ($range_options as $option) {
+        $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
+        $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
+        echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
+      } ?>
+    </nav>
     <footer class="field-guide-footer">
       <div><b>Notes</b><span>Birds are listed in order of recent detections.</span></div>
       <div><b>Symbol key</b><span>Call detected · multiple calls · unconfirmed</span></div>
