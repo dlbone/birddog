@@ -104,7 +104,6 @@ function collage_window_label($hours) {
       </div>
     </div>
     <header class="collage-header">
-      <p class="collage-kicker">Plate XI</p>
       <h2>Recent Visitors</h2>
       <p class="field-guide-subtitle">A record of birds detected by ear in <?php echo htmlspecialchars(collage_window_label($requested_hours)); ?>.</p>
     </header>
