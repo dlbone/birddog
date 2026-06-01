@@ -105,7 +105,7 @@ function collage_window_label($hours) {
     </div>
     <header class="collage-header">
       <p class="collage-kicker">Plate XI</p>
-      <h2>Heard Recently</h2>
+      <h2>Recent Visitors</h2>
       <p class="field-guide-subtitle">A record of birds detected by ear in <?php echo htmlspecialchars(collage_window_label($requested_hours)); ?>.</p>
     </header>
     <div class="collage-empty" <?php if (count($birds) > 0) echo 'hidden'; ?>>No detections yet. The plate will fill in as BirdNET hears species.</div>
