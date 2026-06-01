@@ -28,6 +28,9 @@ Options:
   --restore-cache PATH    restore a tar.gz made from BirdSongs/Extracted/collage
   --gemini-key KEY        install a Gemini API key for image generation
   --gemini-key-file PATH  install a Gemini API key from a local file
+
+If neither --gemini-key nor --gemini-key-file is passed, the installer will use
+GEMINI_API_KEY from the environment when it is set.
 EOF
 }
 
@@ -123,6 +126,8 @@ preflight() {
     fi
   elif [ "$GEMINI_KEY" ]; then
     echo "OK   Gemini key provided as argument"
+  elif [ "${GEMINI_API_KEY:-}" ]; then
+    echo "OK   Gemini key provided by GEMINI_API_KEY"
   elif [ -s /etc/birdnet/gemini_api_key ]; then
     echo "OK   existing /etc/birdnet/gemini_api_key"
   else
@@ -183,6 +188,12 @@ elif [ -n "$GEMINI_KEY_FILE" ]; then
     exit 1
   fi
   sudo install -m 0600 "$GEMINI_KEY_FILE" /etc/birdnet/gemini_api_key
+elif [ -n "${GEMINI_API_KEY:-}" ]; then
+  tmp_key="$(mktemp)"
+  trap 'rm -f "$tmp_key"' EXIT
+  printf '%s\n' "$GEMINI_API_KEY" > "$tmp_key"
+  chmod 600 "$tmp_key"
+  sudo install -m 0600 "$tmp_key" /etc/birdnet/gemini_api_key
 fi
 
 if [ -f "$STYLE_SRC" ]; then

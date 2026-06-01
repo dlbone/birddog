@@ -100,7 +100,17 @@ cd ~/BirdNET-Pi
 scripts/install_birddog_customizations.sh --gemini-key-file ~/gemini_api_key
 ```
 
-You can also pass the key directly:
+If you already have the key in your shell environment, the installer will pick
+it up automatically:
+
+```bash
+export GEMINI_API_KEY='YOUR_GEMINI_API_KEY'
+cd ~/BirdNET-Pi
+./install.sh
+```
+
+You can also pass the key directly, though the key-file or environment flow is
+cleaner for normal use:
 
 ```bash
 scripts/install_birddog_customizations.sh --gemini-key 'YOUR_GEMINI_API_KEY'

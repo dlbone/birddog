@@ -24,6 +24,8 @@ Typical fresh Pi setup:
   git clone https://github.com/dlbone/birddog.git BirdNET-Pi
   cd BirdNET-Pi
   ./install.sh --gemini-key-file ~/gemini_api_key
+
+You can also export GEMINI_API_KEY before running ./install.sh.
 EOF
 }
 
@@ -121,6 +123,8 @@ preflight() {
     fi
   elif [ "$GEMINI_KEY" ]; then
     echo "OK   Gemini key provided as argument"
+  elif [ "${GEMINI_API_KEY:-}" ]; then
+    echo "OK   Gemini key provided by GEMINI_API_KEY"
   elif [ -s /etc/birdnet/gemini_api_key ]; then
     echo "OK   existing /etc/birdnet/gemini_api_key"
   else
