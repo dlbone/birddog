@@ -38,6 +38,7 @@ DEFAULT_STYLE = (
 )
 DEFAULT_MODEL = "gemini-2.5-flash-image"
 TODAY_HOURS = -1
+RANGE_HOURS = (1, 12, TODAY_HOURS, 24, 168, 1000000)
 
 
 def slugify(value):
@@ -216,7 +217,7 @@ def fetch_wikipedia_summary(sci_name, com_name):
     }
 
 
-def enrich_metadata(species):
+def enrich_metadata(species, fetch_missing=True):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     cache = read_json(META_PATH, {})
     changed = False
@@ -224,7 +225,7 @@ def enrich_metadata(species):
     for bird in species:
         sci_name = bird.get("sci_name", "")
         cached = cache.get(sci_name, {})
-        if not cached.get("description"):
+        if fetch_missing and not cached.get("description"):
             cached = fetch_wikipedia_summary(sci_name, bird.get("com_name", ""))
             cached["date_created"] = today
             changed = True
@@ -530,21 +531,8 @@ def read_existing_species_for_hours(hours):
         return []
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Build BirdNET-Pi bird collage image index.")
-    parser.add_argument("--hours", type=int, default=24, help="recent detection window")
-    parser.add_argument("--limit", type=int, default=28, help="max birds in the collage")
-    parser.add_argument("--generate", action="store_true", help="generate missing images with Gemini")
-    parser.add_argument("--force", action="store_true", help="regenerate existing images")
-    parser.add_argument("--model", default=os.environ.get("GEMINI_IMAGE_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--max-new", type=int, default=3, help="max new images per run")
-    parser.add_argument("--sci", default="", help="only generate images for this scientific name")
-    parser.add_argument("--variant", choices=("collage", "detail", "both"), default="both", help="image variant to generate")
-    args = parser.parse_args()
-
-    species = get_species(args.hours, args.limit)
-    if not species and args.hours != TODAY_HOURS:
-        species = read_existing_species_for_hours(args.hours) or read_existing_species()
+def build_index(args, hours):
+    species = get_species(hours, args.limit)
     if args.generate and species:
         key = api_key()
         if not key:
@@ -571,9 +559,30 @@ def main():
                     time.sleep(1)
 
     attach_image_metadata(species)
-    enrich_metadata(species)
-    write_index(species, args.hours)
-    print(f"Wrote {index_path_for_hours(args.hours)} with {len(species)} species.")
+    enrich_metadata(species, fetch_missing=not args.skip_enrich)
+    write_index(species, hours)
+    print(f"Wrote {index_path_for_hours(hours)} with {len(species)} species.")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Build BirdNET-Pi bird collage image index.")
+    parser.add_argument("--hours", type=int, default=24, help="recent detection window")
+    parser.add_argument("--all-ranges", action="store_true", help="build every collage time-window index")
+    parser.add_argument("--limit", type=int, default=28, help="max birds in the collage")
+    parser.add_argument("--generate", action="store_true", help="generate missing images with Gemini")
+    parser.add_argument("--force", action="store_true", help="regenerate existing images")
+    parser.add_argument("--model", default=os.environ.get("GEMINI_IMAGE_MODEL", DEFAULT_MODEL))
+    parser.add_argument("--max-new", type=int, default=3, help="max new images per run")
+    parser.add_argument("--sci", default="", help="only generate images for this scientific name")
+    parser.add_argument("--variant", choices=("collage", "detail", "both"), default="both", help="image variant to generate")
+    parser.add_argument("--skip-enrich", action="store_true", help="skip slow external metadata lookups")
+    args = parser.parse_args()
+
+    if args.all_ranges:
+        for hours in RANGE_HOURS:
+            build_index(args, hours)
+    else:
+        build_index(args, args.hours)
 
 
 if __name__ == "__main__":

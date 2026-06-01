@@ -69,7 +69,12 @@ function collage_count_class($count) {
         echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
       } ?>
     </div>
-    <a class="collage-menu" href="views.php?view=Overview">menu</a>
+    <div class="collage-toolbar-actions">
+      <button class="collage-label-toggle" type="button" aria-pressed="false" aria-label="Show all bird labels">
+        labels
+      </button>
+      <a class="collage-menu" href="views.php?view=Overview">menu</a>
+    </div>
   </div>
   <header class="collage-header">
     <p class="collage-kicker"><?php echo htmlspecialchars(get_sitename()); ?> birds</p>
@@ -118,6 +123,7 @@ function collage_count_class($count) {
   const dataUrl = <?php echo json_encode('scripts/collage_index.php?hours=' . intval($requested_hours)); ?>;
   const collage = document.querySelector('.bird-collage');
   const empty = document.querySelector('.collage-empty');
+  const labelToggle = document.querySelector('.collage-label-toggle');
   const modal = document.querySelector('.bird-modal');
   const modalArt = modal.querySelector('.bird-modal-art');
   const modalTitle = modal.querySelector('#bird-modal-title');
@@ -134,6 +140,36 @@ function collage_count_class($count) {
   let pollDelay = 5000;
   let activeModalSci = '';
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
+
+  function readStoredShowAllLabels() {
+    try {
+      return localStorage.getItem('birddog:collage-labels') === 'shown';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function writeStoredShowAllLabels(show) {
+    try {
+      localStorage.setItem('birddog:collage-labels', show ? 'shown' : 'normal');
+    } catch (error) {}
+  }
+
+  function setShowAllLabels(show) {
+    document.body.classList.toggle('collage-labels-shown', show);
+    if (labelToggle) {
+      labelToggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+      labelToggle.setAttribute('aria-label', show ? 'Show labels only on hover' : 'Show all bird labels');
+    }
+    writeStoredShowAllLabels(show);
+  }
+
+  setShowAllLabels(readStoredShowAllLabels());
+  if (labelToggle) {
+    labelToggle.addEventListener('click', function() {
+      setShowAllLabels(labelToggle.getAttribute('aria-pressed') !== 'true');
+    });
+  }
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, function(char) {
@@ -231,6 +267,13 @@ function collage_count_class($count) {
     </div>`;
   }
 
+  function fallbackDescription(bird) {
+    const common = bird.com_name || 'This bird';
+    const sci = bird.sci_name ? ` (${bird.sci_name})` : '';
+    const genus = bird.genus ? ` It belongs to the genus ${bird.genus}.` : '';
+    return `${common}${sci} has been detected by the porch microphone and added to this local BirdNET catalog.${genus} A fuller field-guide description will appear automatically once species metadata is available.`;
+  }
+
   function openModal(idx) {
     const bird = currentBirds[idx];
     if (!bird) return;
@@ -248,7 +291,7 @@ function collage_count_class($count) {
       <div><b>${Number(bird.total_count || bird.recent_count || 0)}</b><span>all time</span></div>
       <div><b>${Number(bird.today_count || 0)}</b><span>today</span></div>
       <div><b>${escapeHtml(relativeDate(bird.first_heard || bird.last_heard))}</b><span>first heard</span></div>`;
-    modalDescription.textContent = bird.description || `${bird.com_name} was heard by BirdNET-Pi at ${<?php echo json_encode(get_sitename()); ?>}. Generated artwork is used for the collage when no local bird image exists.`;
+    modalDescription.textContent = bird.description || fallbackDescription(bird);
     modalMeta.innerHTML = `<dt>Genus</dt><dd>${escapeHtml(bird.genus || '')}</dd><dt>Rarity</dt><dd>${escapeHtml(bird.rarity || 'new')}</dd><dt>Last heard</dt><dd>${escapeHtml(relativeDate(bird.last_heard))}</dd>`;
     const recordings = bird.recordings || [];
     modalRecordingCount.textContent = `${recordings.length || Number(bird.total_count || 0)} captured`;
