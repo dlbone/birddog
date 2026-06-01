@@ -59,42 +59,87 @@ function collage_count_class($count) {
   if ($count <= 18) return 'bird-count-many';
   return 'bird-count-dense';
 }
+
+function collage_window_label($hours) {
+  if ($hours === -1) return 'since midnight';
+  if ($hours === 1) return 'last hour';
+  if ($hours === 12) return 'last 12 hours';
+  if ($hours === 24) return 'last 24 hours';
+  if ($hours === 168) return 'last 7 days';
+  return 'all time';
+}
 ?>
 <div class="collage-page">
-  <div class="collage-toolbar">
-    <div class="collage-range">
-      <?php foreach ($range_options as $option) {
-        $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
-        $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
-        echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
-      } ?>
+  <aside class="field-guide-rail" aria-label="Observation controls and summary">
+    <div class="field-guide-brand">
+      <span><?php echo htmlspecialchars(get_sitename()); ?> birds</span>
+      <i aria-hidden="true">aves</i>
     </div>
-    <div class="collage-toolbar-actions">
-      <button class="collage-label-toggle" type="button" aria-pressed="false" aria-label="Show all bird labels">
-        labels
-      </button>
-      <a class="collage-menu" href="views.php?view=Overview">menu</a>
+    <section>
+      <h3>Observation window</h3>
+      <nav class="collage-range" aria-label="Observation window">
+        <?php foreach ($range_options as $option) {
+          $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
+          $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
+          echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
+        } ?>
+      </nav>
+    </section>
+    <section class="field-recent">
+      <div class="field-section-head"><h3>Recently heard</h3><span><?php echo htmlspecialchars($active_range['label']); ?></span></div>
+      <ol class="field-recent-list">
+        <?php foreach (array_slice($birds, 0, 5) as $bird) {
+          $name = htmlspecialchars($bird['com_name']);
+          $count = intval($bird['recent_count']);
+          echo '<li><span>' . $name . '</span><b>' . $count . ' ' . ($count === 1 ? 'call' : 'calls') . '</b></li>';
+        } ?>
+      </ol>
+    </section>
+    <section class="field-meta">
+      <h3>Metadata</h3>
+      <p><span>Date</span><?php echo htmlspecialchars(date('M j, Y')); ?></p>
+      <p><span>Window</span><?php echo htmlspecialchars(collage_window_label($requested_hours)); ?></p>
+      <p><span>Source</span>Auto-detected</p>
+    </section>
+    <p class="field-script-note">Dawn chorus log.<br>Birds listed by most recent detections.</p>
+  </aside>
+  <main class="field-guide-plate">
+    <div class="collage-toolbar">
+      <p>Passeriformes <span>/</span> Aves</p>
+      <div class="collage-toolbar-actions">
+        <button class="collage-label-toggle" type="button" aria-pressed="false" aria-label="Show all bird labels">
+          labels
+        </button>
+        <a class="collage-menu" href="views.php?view=Overview">menu</a>
+      </div>
     </div>
-  </div>
-  <header class="collage-header">
-    <p class="collage-kicker"><?php echo htmlspecialchars(get_sitename()); ?> birds</p>
-    <h2>Heard Recently</h2>
-  </header>
-  <div class="collage-empty" <?php if (count($birds) > 0) echo 'hidden'; ?>>No detections yet. The collage will fill in as BirdNET hears species.</div>
-  <div class="bird-collage <?php echo collage_count_class(count($birds)); ?>" aria-label="Recently heard birds collage" <?php if (count($birds) === 0) echo 'hidden'; ?>>
-    <?php foreach ($birds as $idx => $bird) {
-        $name = htmlspecialchars($bird['com_name']);
-        $sci = htmlspecialchars($bird['sci_name']);
-        $count = intval($bird['recent_count']);
-        if (!empty($bird['has_image'])) {
-          $src = htmlspecialchars($bird['image']);
-          echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><span>$count heard</span></figcaption></figure>";
-        } else {
-          $initials = htmlspecialchars(bird_initials($bird['com_name']));
-          echo "<figure class=\"collage-bird collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\"><div>$initials</div><figcaption><b>$name</b><span>image queued</span><i>$sci</i></figcaption></figure>";
-        }
-      } ?>
-  </div>
+    <header class="collage-header">
+      <p class="collage-kicker">Plate XI</p>
+      <h2>Heard Recently</h2>
+      <p class="field-guide-subtitle">A record of birds detected by ear in <?php echo htmlspecialchars(collage_window_label($requested_hours)); ?>.</p>
+    </header>
+    <div class="collage-empty" <?php if (count($birds) > 0) echo 'hidden'; ?>>No detections yet. The plate will fill in as BirdNET hears species.</div>
+    <div class="bird-collage <?php echo collage_count_class(count($birds)); ?>" aria-label="Recently heard birds collage" <?php if (count($birds) === 0) echo 'hidden'; ?>>
+      <?php foreach ($birds as $idx => $bird) {
+          $name = htmlspecialchars($bird['com_name']);
+          $sci = htmlspecialchars($bird['sci_name']);
+          $count = intval($bird['recent_count']);
+          $num = str_pad(strval($idx + 1), 2, '0', STR_PAD_LEFT);
+          if (!empty($bird['has_image'])) {
+            $src = htmlspecialchars($bird['image']);
+            echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><small>$num</small><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
+          } else {
+            $initials = htmlspecialchars(bird_initials($bird['com_name']));
+            echo "<figure class=\"collage-bird collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\"><div>$initials</div><figcaption><small>$num</small><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
+          }
+        } ?>
+    </div>
+    <footer class="field-guide-footer">
+      <div><b>Notes</b><span>Birds are listed in order of recent detections.</span></div>
+      <div><b>Symbol key</b><span>Call detected · multiple calls · unconfirmed</span></div>
+      <div><b>Recorded by</b><span>BirdDog Audio Recorder</span></div>
+    </footer>
+  </main>
 </div>
 <div class="bird-modal" hidden>
   <div class="bird-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bird-modal-title">
@@ -123,6 +168,7 @@ function collage_count_class($count) {
   const dataUrl = <?php echo json_encode('scripts/collage_index.php?hours=' . intval($requested_hours)); ?>;
   const collage = document.querySelector('.bird-collage');
   const empty = document.querySelector('.collage-empty');
+  const recentList = document.querySelector('.field-recent-list');
   const labelToggle = document.querySelector('.collage-label-toggle');
   const modal = document.querySelector('.bird-modal');
   const modalArt = modal.querySelector('.bird-modal-art');
@@ -241,11 +287,20 @@ function collage_count_class($count) {
     const name = escapeHtml(bird.com_name);
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
+    const num = String(idx + 1).padStart(2, '0');
     if (bird.has_image) {
       const src = escapeHtml(assetUrl(bird.image));
-      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><b>${name}</b><span>${heard} heard</span></figcaption></figure>`;
+      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><small>${num}</small><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
     }
-    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><span>image queued</span><i>${sci}</i></figcaption></figure>`;
+    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><small>${num}</small><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
+  }
+
+  function recentListMarkup(birds) {
+    return birds.slice(0, 5).map(bird => {
+      const heard = Number(bird.recent_count || 0);
+      const noun = heard === 1 ? 'call' : 'calls';
+      return `<li><span>${escapeHtml(bird.com_name)}</span><b>${heard} ${noun}</b></li>`;
+    }).join('');
   }
 
   function relativeDate(value) {
@@ -568,6 +623,7 @@ function collage_count_class($count) {
     currentBirds = birds;
     collage.className = `bird-collage ${countClass(birds.length)}`;
     collage.innerHTML = birds.map(birdMarkup).join('');
+    if (recentList) recentList.innerHTML = recentListMarkup(birds);
     collage.querySelectorAll('img').forEach(img => {
       if (!img.complete) img.addEventListener('load', packBirds, {once: true});
     });
