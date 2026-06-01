@@ -59,37 +59,87 @@ function collage_count_class($count) {
   if ($count <= 18) return 'bird-count-many';
   return 'bird-count-dense';
 }
+
+function collage_window_label($hours) {
+  if ($hours === -1) return 'since midnight';
+  if ($hours === 1) return 'last hour';
+  if ($hours === 12) return 'last 12 hours';
+  if ($hours === 24) return 'last 24 hours';
+  if ($hours === 168) return 'last 7 days';
+  return 'all time';
+}
 ?>
 <div class="collage-page">
-  <div class="collage-toolbar">
-    <div class="collage-range">
-      <?php foreach ($range_options as $option) {
-        $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
-        $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
-        echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
-      } ?>
+  <aside class="field-guide-rail" aria-label="Observation controls and summary">
+    <div class="field-guide-brand">
+      <span><?php echo htmlspecialchars(get_sitename()); ?> birds</span>
+      <i aria-hidden="true">aves</i>
     </div>
-    <a class="collage-menu" href="views.php?view=Overview">menu</a>
-  </div>
-  <header class="collage-header">
-    <p class="collage-kicker"><?php echo htmlspecialchars(get_sitename()); ?> birds</p>
-    <h2>Heard Recently</h2>
-  </header>
-  <div class="collage-empty" <?php if (count($birds) > 0) echo 'hidden'; ?>>No detections yet. The collage will fill in as BirdNET hears species.</div>
-  <div class="bird-collage <?php echo collage_count_class(count($birds)); ?>" aria-label="Recently heard birds collage" <?php if (count($birds) === 0) echo 'hidden'; ?>>
-    <?php foreach ($birds as $idx => $bird) {
-        $name = htmlspecialchars($bird['com_name']);
-        $sci = htmlspecialchars($bird['sci_name']);
-        $count = intval($bird['recent_count']);
-        if (!empty($bird['has_image'])) {
-          $src = htmlspecialchars($bird['image']);
-          echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><span>$count heard</span></figcaption></figure>";
-        } else {
-          $initials = htmlspecialchars(bird_initials($bird['com_name']));
-          echo "<figure class=\"collage-bird collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\"><div>$initials</div><figcaption><b>$name</b><span>image queued</span><i>$sci</i></figcaption></figure>";
-        }
-      } ?>
-  </div>
+    <section>
+      <h3>Observation window</h3>
+      <nav class="collage-range" aria-label="Observation window">
+        <?php foreach ($range_options as $option) {
+          $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
+          $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
+          echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
+        } ?>
+      </nav>
+    </section>
+    <section class="field-recent">
+      <div class="field-section-head"><h3>Recently heard</h3><span><?php echo htmlspecialchars($active_range['label']); ?></span></div>
+      <ol class="field-recent-list">
+        <?php foreach (array_slice($birds, 0, 5) as $bird) {
+          $name = htmlspecialchars($bird['com_name']);
+          $count = intval($bird['recent_count']);
+          echo '<li><span>' . $name . '</span><b>' . $count . ' ' . ($count === 1 ? 'call' : 'calls') . '</b></li>';
+        } ?>
+      </ol>
+    </section>
+    <section class="field-meta">
+      <h3>Metadata</h3>
+      <p><span>Date</span><?php echo htmlspecialchars(date('M j, Y')); ?></p>
+      <p><span>Window</span><?php echo htmlspecialchars(collage_window_label($requested_hours)); ?></p>
+      <p><span>Source</span>Auto-detected</p>
+    </section>
+    <p class="field-script-note">Dawn chorus log.<br>Birds listed by most recent detections.</p>
+  </aside>
+  <main class="field-guide-plate">
+    <div class="collage-toolbar">
+      <p>Passeriformes <span>/</span> Aves</p>
+      <div class="collage-toolbar-actions">
+        <button class="collage-label-toggle" type="button" aria-pressed="false" aria-label="Show all bird labels">
+          labels
+        </button>
+        <a class="collage-menu" href="views.php?view=Overview">menu</a>
+      </div>
+    </div>
+    <header class="collage-header">
+      <p class="collage-kicker">Plate XI</p>
+      <h2>Heard Recently</h2>
+      <p class="field-guide-subtitle">A record of birds detected by ear in <?php echo htmlspecialchars(collage_window_label($requested_hours)); ?>.</p>
+    </header>
+    <div class="collage-empty" <?php if (count($birds) > 0) echo 'hidden'; ?>>No detections yet. The plate will fill in as BirdNET hears species.</div>
+    <div class="bird-collage <?php echo collage_count_class(count($birds)); ?>" aria-label="Recently heard birds collage" <?php if (count($birds) === 0) echo 'hidden'; ?>>
+      <?php foreach ($birds as $idx => $bird) {
+          $name = htmlspecialchars($bird['com_name']);
+          $sci = htmlspecialchars($bird['sci_name']);
+          $count = intval($bird['recent_count']);
+          $num = str_pad(strval($idx + 1), 2, '0', STR_PAD_LEFT);
+          if (!empty($bird['has_image'])) {
+            $src = htmlspecialchars($bird['image']);
+            echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><small>$num</small><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
+          } else {
+            $initials = htmlspecialchars(bird_initials($bird['com_name']));
+            echo "<figure class=\"collage-bird collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\"><div>$initials</div><figcaption><small>$num</small><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
+          }
+        } ?>
+    </div>
+    <footer class="field-guide-footer">
+      <div><b>Notes</b><span>Birds are listed in order of recent detections.</span></div>
+      <div><b>Symbol key</b><span>Call detected · multiple calls · unconfirmed</span></div>
+      <div><b>Recorded by</b><span>BirdDog Audio Recorder</span></div>
+    </footer>
+  </main>
 </div>
 <div class="bird-modal" hidden>
   <div class="bird-modal-panel" role="dialog" aria-modal="true" aria-labelledby="bird-modal-title">
@@ -110,6 +160,7 @@ function collage_count_class($count) {
     </section>
   </div>
 </div>
+<script src="static/silhouette-pack.js?v=<?php echo filemtime($home . '/BirdNET-Pi/homepage/static/silhouette-pack.js'); ?>"></script>
 <script>
 (function() {
   const initialIndex = <?php echo json_encode($payload ?: ['generated_at' => null, 'species' => []]); ?>;
@@ -117,6 +168,8 @@ function collage_count_class($count) {
   const dataUrl = <?php echo json_encode('scripts/collage_index.php?hours=' . intval($requested_hours)); ?>;
   const collage = document.querySelector('.bird-collage');
   const empty = document.querySelector('.collage-empty');
+  const recentList = document.querySelector('.field-recent-list');
+  const labelToggle = document.querySelector('.collage-label-toggle');
   const modal = document.querySelector('.bird-modal');
   const modalArt = modal.querySelector('.bird-modal-art');
   const modalTitle = modal.querySelector('#bird-modal-title');
@@ -133,6 +186,36 @@ function collage_count_class($count) {
   let pollDelay = 5000;
   let activeModalSci = '';
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
+
+  function readStoredShowAllLabels() {
+    try {
+      return localStorage.getItem('birddog:collage-labels') === 'shown';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function writeStoredShowAllLabels(show) {
+    try {
+      localStorage.setItem('birddog:collage-labels', show ? 'shown' : 'normal');
+    } catch (error) {}
+  }
+
+  function setShowAllLabels(show) {
+    document.body.classList.toggle('collage-labels-shown', show);
+    if (labelToggle) {
+      labelToggle.setAttribute('aria-pressed', show ? 'true' : 'false');
+      labelToggle.setAttribute('aria-label', show ? 'Show labels only on hover' : 'Show all bird labels');
+    }
+    writeStoredShowAllLabels(show);
+  }
+
+  setShowAllLabels(readStoredShowAllLabels());
+  if (labelToggle) {
+    labelToggle.addEventListener('click', function() {
+      setShowAllLabels(labelToggle.getAttribute('aria-pressed') !== 'true');
+    });
+  }
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, function(char) {
@@ -204,11 +287,20 @@ function collage_count_class($count) {
     const name = escapeHtml(bird.com_name);
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
+    const num = String(idx + 1).padStart(2, '0');
     if (bird.has_image) {
       const src = escapeHtml(assetUrl(bird.image));
-      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><b>${name}</b><span>${heard} heard</span></figcaption></figure>`;
+      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><small>${num}</small><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
     }
-    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><span>image queued</span><i>${sci}</i></figcaption></figure>`;
+    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><small>${num}</small><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
+  }
+
+  function recentListMarkup(birds) {
+    return birds.slice(0, 5).map(bird => {
+      const heard = Number(bird.recent_count || 0);
+      const noun = heard === 1 ? 'call' : 'calls';
+      return `<li><span>${escapeHtml(bird.com_name)}</span><b>${heard} ${noun}</b></li>`;
+    }).join('');
   }
 
   function relativeDate(value) {
@@ -223,14 +315,28 @@ function collage_count_class($count) {
 
   function recordingMarkup(recording) {
     const confidence = Math.round(Number(recording.confidence || 0) * 100);
+    const folder = String(recording.file_name || '').split('-')[0] || '';
+    const comFolder = String(recording.file_name || '').replace(/-\d+-.*$/, '') || folder;
+    const audioPath = `/By_Date/${encodeURIComponent(recording.date || '')}/${encodeURIComponent(comFolder)}/${encodeURIComponent(recording.file_name || '')}`;
     return `<div class="bird-modal-recording">
-      <a class="bird-modal-play" href="/views.php?view=Recordings&filename=${encodeURIComponent(recording.file_name || '')}" target="_top">&#9654;</a>
-      <div><b>${escapeHtml(relativeDate(`${recording.date} ${recording.time}`))}</b><span>${escapeHtml(recording.date)} &middot; ${escapeHtml(recording.time)}</span></div>
+      <button class="bird-modal-play" type="button" data-audio="${escapeHtml(audioPath)}" aria-label="Play recording">&#9654;</button>
+      <div class="bird-modal-rec-main">
+        <div><b>${escapeHtml(relativeDate(`${recording.date} ${recording.time}`))}</b><span>${escapeHtml(recording.date)} &middot; ${escapeHtml(recording.time)}</span></div>
+        <canvas class="bird-modal-viz" width="320" height="34" data-audio="${escapeHtml(audioPath)}" aria-hidden="true"></canvas>
+      </div>
       <strong>${confidence}%</strong>
     </div>`;
   }
 
+  function fallbackDescription(bird) {
+    const common = bird.com_name || 'This bird';
+    const sci = bird.sci_name ? ` (${bird.sci_name})` : '';
+    const genus = bird.genus ? ` It belongs to the genus ${bird.genus}.` : '';
+    return `${common}${sci} has been detected by the porch microphone and added to this local BirdNET catalog.${genus} A fuller field-guide description will appear automatically once species metadata is available.`;
+  }
+
   function openModal(idx) {
+    stopModalAudio();
     const bird = currentBirds[idx];
     if (!bird) return;
     activeModalSci = bird.sci_name || '';
@@ -247,7 +353,7 @@ function collage_count_class($count) {
       <div><b>${Number(bird.total_count || bird.recent_count || 0)}</b><span>all time</span></div>
       <div><b>${Number(bird.today_count || 0)}</b><span>today</span></div>
       <div><b>${escapeHtml(relativeDate(bird.first_heard || bird.last_heard))}</b><span>first heard</span></div>`;
-    modalDescription.textContent = bird.description || `${bird.com_name} was heard by BirdNET-Pi at ${<?php echo json_encode(get_sitename()); ?>}. Generated artwork is used for the collage when no local bird image exists.`;
+    modalDescription.textContent = bird.description || fallbackDescription(bird);
     modalMeta.innerHTML = `<dt>Genus</dt><dd>${escapeHtml(bird.genus || '')}</dd><dt>Rarity</dt><dd>${escapeHtml(bird.rarity || 'new')}</dd><dt>Last heard</dt><dd>${escapeHtml(relativeDate(bird.last_heard))}</dd>`;
     const recordings = bird.recordings || [];
     modalRecordingCount.textContent = `${recordings.length || Number(bird.total_count || 0)} captured`;
@@ -256,13 +362,258 @@ function collage_count_class($count) {
       : '<div class="bird-modal-empty">No recordings are indexed for this manual entry yet.</div>';
     modal.hidden = false;
     document.body.classList.add('modal-open');
+    initRecordingWaveforms();
     closeButton.focus();
   }
 
   function closeModal() {
+    stopModalAudio();
     modal.hidden = true;
     activeModalSci = '';
     document.body.classList.remove('modal-open');
+  }
+
+  let modalAudio = null;
+  let modalAudioButton = null;
+  let modalAudioCtx = null;
+  let modalVizFrame = 0;
+  const PLAYHEAD_VISUAL_LAG_SEC = 0.2;
+  const waveformCache = new Map();
+
+  function resetRecordingRow(button) {
+    if (!button) return;
+    const row = button.closest('.bird-modal-recording');
+    button.innerHTML = '&#9654;';
+    button.setAttribute('aria-label', 'Play recording');
+    button.removeAttribute('data-playing');
+    if (row) {
+      row.removeAttribute('data-playing');
+      const canvas = row.querySelector('.bird-modal-viz');
+      if (canvas) drawWaveformCanvas(canvas, 0);
+    }
+  }
+
+  function stopModalAudio() {
+    if (modalVizFrame) {
+      cancelAnimationFrame(modalVizFrame);
+      modalVizFrame = 0;
+    }
+    if (modalAudio) {
+      try { modalAudio.pause(); } catch (error) {}
+      modalAudio.src = '';
+      modalAudio = null;
+    }
+    resetRecordingRow(modalAudioButton);
+    modalAudioButton = null;
+  }
+
+  function baseViz(canvas, message) {
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#f5f4f0';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(33,31,27,0.16)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(10, Math.round(h / 2) + 0.5);
+    ctx.lineTo(w - 10, Math.round(h / 2) + 0.5);
+    ctx.stroke();
+    if (message) {
+      ctx.fillStyle = 'rgba(33,31,27,0.42)';
+      ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(message, w / 2, h / 2);
+    }
+  }
+
+  function buildEnergyLine(audioBuffer, points) {
+    const ch0 = audioBuffer.getChannelData(0);
+    const ch1 = audioBuffer.numberOfChannels > 1 ? audioBuffer.getChannelData(1) : null;
+    const step = Math.max(1, Math.floor(ch0.length / points));
+    const values = new Array(points);
+    let max = 0;
+    for (let i = 0; i < points; i++) {
+      const start = i * step;
+      const end = Math.min(ch0.length, start + step);
+      let sum = 0;
+      let n = 0;
+      for (let j = start; j < end; j += 8) {
+        const sample = ch1 ? (ch0[j] + ch1[j]) * 0.5 : ch0[j];
+        sum += sample * sample;
+        n++;
+      }
+      const rms = Math.sqrt(sum / Math.max(1, n));
+      values[i] = rms;
+      if (rms > max) max = rms;
+    }
+    if (max > 0) {
+      for (let i = 0; i < values.length; i++) values[i] = Math.min(1, values[i] / max);
+    }
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 1; i < values.length - 1; i++) {
+        values[i] = (values[i - 1] + values[i] * 2 + values[i + 1]) / 4;
+      }
+    }
+    return values;
+  }
+
+  function drawWaveformCanvas(canvas, progress) {
+    const values = waveformCache.get(canvas.dataset.audio || '');
+    if (!values) {
+      baseViz(canvas, 'loading');
+      return;
+    }
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    const padX = 10;
+    const padY = 7;
+    const plotW = w - padX * 2;
+    const plotH = h - padY * 2;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = '#f5f4f0';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(127,181,138,0.22)';
+    ctx.fillRect(0, 0, Math.round(w * Math.max(0, Math.min(1, progress || 0))), h);
+    ctx.strokeStyle = 'rgba(33,31,27,0.14)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padX, h - padY + 0.5);
+    ctx.lineTo(w - padX, h - padY + 0.5);
+    ctx.stroke();
+    ctx.strokeStyle = '#211f1b';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    values.forEach(function(v, i) {
+      const x = padX + (i / Math.max(1, values.length - 1)) * plotW;
+      const y = h - padY - Math.pow(v, 0.72) * plotH;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    const playX = padX + Math.max(0, Math.min(1, progress || 0)) * plotW;
+    ctx.strokeStyle = 'rgba(33,31,27,0.45)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(playX, padY - 1);
+    ctx.lineTo(playX, h - padY + 2);
+    ctx.stroke();
+  }
+
+  function ensureWaveform(canvas) {
+    const url = canvas && canvas.dataset.audio;
+    if (!url) return Promise.resolve();
+    if (waveformCache.has(url)) {
+      drawWaveformCanvas(canvas, 0);
+      return Promise.resolve();
+    }
+    baseViz(canvas, 'loading');
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) {
+      baseViz(canvas, 'audio preview unavailable');
+      return Promise.resolve();
+    }
+    modalAudioCtx = modalAudioCtx || new Ctx();
+    if (modalAudioCtx.state === 'suspended') {
+      modalAudioCtx.resume().catch(function() {});
+    }
+    return fetch(url, {cache: 'force-cache'})
+      .then(function(response) {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.arrayBuffer();
+      })
+      .then(function(buffer) { return modalAudioCtx.decodeAudioData(buffer); })
+      .then(function(audioBuffer) {
+        waveformCache.set(url, buildEnergyLine(audioBuffer, canvas.width - 20));
+        drawWaveformCanvas(canvas, 0);
+      })
+      .catch(function(error) {
+        console.warn('waveform render failed', error);
+        baseViz(canvas, 'preview unavailable');
+      });
+  }
+
+  function initRecordingWaveforms() {
+    modalList.querySelectorAll('.bird-modal-viz').forEach(function(canvas) {
+      ensureWaveform(canvas);
+    });
+  }
+
+  function startPlayhead(canvas) {
+    if (modalVizFrame) cancelAnimationFrame(modalVizFrame);
+    const tick = function() {
+      if (!modalAudio || !canvas) return;
+      drawWaveformCanvas(canvas, playheadProgress());
+      modalVizFrame = requestAnimationFrame(tick);
+    };
+    tick();
+  }
+
+  function playheadProgress() {
+    if (!modalAudio || !modalAudio.duration) return 0;
+    return Math.max(0, (modalAudio.currentTime - PLAYHEAD_VISUAL_LAG_SEC) / modalAudio.duration);
+  }
+
+  function playModalRecording(button) {
+    if (!button) return;
+    if (button === modalAudioButton && modalAudio) {
+      if (modalAudio.paused) {
+        modalAudio.play().catch(function(error) { console.warn('recording play failed', error); });
+        button.innerHTML = '&#10074;&#10074;';
+        button.setAttribute('data-playing', 'true');
+        button.setAttribute('aria-label', 'Pause recording');
+        const row = button.closest('.bird-modal-recording');
+        if (row) row.setAttribute('data-playing', 'true');
+        const canvas = row && row.querySelector('.bird-modal-viz');
+        if (canvas) startPlayhead(canvas);
+      } else {
+        modalAudio.pause();
+        if (modalVizFrame) {
+          cancelAnimationFrame(modalVizFrame);
+          modalVizFrame = 0;
+        }
+        button.innerHTML = '&#9654;';
+        button.removeAttribute('data-playing');
+        button.setAttribute('aria-label', 'Play recording');
+        const row = button.closest('.bird-modal-recording');
+        if (row) row.removeAttribute('data-playing');
+      }
+      return;
+    }
+
+    stopModalAudio();
+    const row = button.closest('.bird-modal-recording');
+    const canvas = row && row.querySelector('.bird-modal-viz');
+    modalAudioButton = button;
+    modalAudio = new Audio(button.dataset.audio || '');
+    button.innerHTML = '&#10074;&#10074;';
+    button.setAttribute('data-playing', 'true');
+    button.setAttribute('aria-label', 'Pause recording');
+    if (row) row.setAttribute('data-playing', 'true');
+
+    modalAudio.addEventListener('ended', stopModalAudio);
+    modalAudio.addEventListener('error', function() {
+      resetRecordingRow(button);
+      button.innerHTML = '!';
+      window.setTimeout(function() { resetRecordingRow(button); }, 1400);
+    });
+    modalAudio.addEventListener('timeupdate', function() {
+      if (!canvas) return;
+      drawWaveformCanvas(canvas, playheadProgress());
+    });
+
+    Promise.resolve(canvas ? ensureWaveform(canvas) : null)
+      .then(function() { return modalAudio.play(); })
+      .then(function() { if (canvas) startPlayhead(canvas); })
+      .catch(function(error) {
+        console.warn('recording play failed', error);
+        stopModalAudio();
+      });
   }
 
   function render(payload) {
@@ -272,6 +623,7 @@ function collage_count_class($count) {
     currentBirds = birds;
     collage.className = `bird-collage ${countClass(birds.length)}`;
     collage.innerHTML = birds.map(birdMarkup).join('');
+    if (recentList) recentList.innerHTML = recentListMarkup(birds);
     collage.querySelectorAll('img').forEach(img => {
       if (!img.complete) img.addEventListener('load', packBirds, {once: true});
     });
@@ -284,222 +636,11 @@ function collage_count_class($count) {
     }
   }
 
-  const GRID_STRIDE = 4;
   let collagePlaced = [];
   let collageHovered = null;
 
-  function decodeMask(raw) {
-    if (!raw || !raw.w || !raw.h || !raw.bits) return null;
-    if (raw.cells) return raw;
-    const bin = atob(raw.bits);
-    const cells = [];
-    const total = raw.w * raw.h;
-    for (let i = 0; i < total; i++) {
-      const byte = bin.charCodeAt(i >> 3);
-      if (byte & (1 << (7 - (i & 7)))) cells.push([i % raw.w, Math.floor(i / raw.w)]);
-    }
-    raw.cells = cells;
-    return raw;
-  }
-
-  function fallbackMask() {
-    const w = 32;
-    const h = 32;
-    const cells = [];
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) cells.push([x, y]);
-    }
-    return {w, h, cells};
-  }
-
-  function tuning(n) {
-    if (n <= 2) return {packingBudgetFrac: 0.42, minTileAreaFrac: 0.075, countExp: 0.56, ellipseAspectBias: 1.15};
-    if (n <= 8) return {packingBudgetFrac: 0.50, minTileAreaFrac: 0.028, countExp: 0.60, ellipseAspectBias: 1.22};
-    if (n <= 18) return {packingBudgetFrac: 0.56, minTileAreaFrac: 0.013, countExp: 0.64, ellipseAspectBias: 1.30};
-    return {packingBudgetFrac: 0.60, minTileAreaFrac: 0.0075, countExp: 0.66, ellipseAspectBias: 1.38};
-  }
-
-  function buildTiles(nodes, width, height) {
-    const T = tuning(nodes.length);
-    const budget = width * height * T.packingBudgetFrac;
-    const minArea = width * height * T.minTileAreaFrac;
-    const tiles = nodes.map((node, idx) => {
-      const bird = currentBirds[idx] || {};
-      const rawMask = decodeMask(bird.mask) || fallbackMask();
-      const imageW = Number(bird.image_width || rawMask.w || 1);
-      const imageH = Number(bird.image_height || rawMask.h || 1);
-      const count = Math.max(1, Number(bird.recent_count || bird.total_count || 1));
-      return {
-        node,
-        idx,
-        data: bird,
-        mask: rawMask,
-        ar: imageW / Math.max(1, imageH),
-        score: Math.pow(count, T.countExp),
-        rotate: 0
-      };
-    });
-    const sumScore = tiles.reduce((sum, tile) => sum + tile.score, 0) || 1;
-    tiles.forEach(tile => {
-      tile.area = Math.max(minArea, budget * tile.score / sumScore);
-    });
-    if (tiles.length > 2) {
-      const ranked = tiles.slice().sort((a, b) => b.score - a.score);
-      ranked[0].area *= 2.65;
-      ranked[0].featuredScale = 'major';
-      ranked[1].area *= 1.45;
-      ranked[1].featuredScale = 'minor';
-    }
-    const sumArea = tiles.reduce((sum, tile) => sum + tile.area, 0);
-    if (sumArea > budget) {
-      const fixed = tiles.filter(tile => tile.area <= minArea + 1e-9).reduce((sum, tile) => sum + tile.area, 0);
-      const flex = sumArea - fixed;
-      const flexBudget = Math.max(0, budget - fixed);
-      const shrink = flex > 0 ? Math.min(1, flexBudget / flex) : 1;
-      tiles.forEach(tile => {
-        if (tile.area > minArea + 1e-9) tile.area *= shrink;
-      });
-    }
-    tiles.forEach(tile => {
-      tile.fullW = Math.sqrt(tile.area * tile.ar);
-      tile.fullH = tile.fullW / tile.ar;
-    });
-    return {tiles, tuning: T};
-  }
-
-  function maskPack(sourceTiles, width, height, ellipseBias) {
-    const tiles = sourceTiles.slice().sort((a, b) => (b.fullW * b.fullH) - (a.fullW * a.fullH));
-    const gridW = Math.max(1, Math.ceil(width / GRID_STRIDE));
-    const gridH = Math.max(1, Math.ceil(height / GRID_STRIDE));
-    const grid = new Uint8Array(gridW * gridH);
-    const centerX = width / 2;
-    const centerY = height / 2;
-    let seed = 0x9E3779B9;
-    function rand() {
-      seed = (seed * 16807) % 2147483647;
-      return seed / 2147483647;
-    }
-    function cellRange(tile, tx, ty, cell) {
-      const sx = tile.fullW / tile.mask.w;
-      const sy = tile.fullH / tile.mask.h;
-      let x0 = ((tx + cell[0] * sx) / GRID_STRIDE) | 0;
-      let y0 = ((ty + cell[1] * sy) / GRID_STRIDE) | 0;
-      let x1 = ((tx + (cell[0] + 1) * sx) / GRID_STRIDE) | 0;
-      let y1 = ((ty + (cell[1] + 1) * sy) / GRID_STRIDE) | 0;
-      if (x0 < 0) x0 = 0;
-      if (y0 < 0) y0 = 0;
-      if (x1 >= gridW) x1 = gridW - 1;
-      if (y1 >= gridH) y1 = gridH - 1;
-      return [x0, y0, x1, y1];
-    }
-    function offGrid(tile, tx, ty) {
-      return tx < 0 || ty < 0 || tx + tile.fullW > width || ty + tile.fullH > height;
-    }
-    function collides(tile, tx, ty) {
-      for (const cell of tile.mask.cells) {
-        const range = cellRange(tile, tx, ty, cell);
-        for (let gy = range[1]; gy <= range[3]; gy++) {
-          const off = gy * gridW;
-          for (let gx = range[0]; gx <= range[2]; gx++) {
-            if (grid[off + gx]) return true;
-          }
-        }
-      }
-      return false;
-    }
-    function stamp(tile, tx, ty) {
-      for (const cell of tile.mask.cells) {
-        const range = cellRange(tile, tx, ty, cell);
-        for (let gy = range[1]; gy <= range[3]; gy++) {
-          const off = gy * gridW;
-          for (let gx = range[0]; gx <= range[2]; gx++) grid[off + gx] = 1;
-        }
-      }
-    }
-    const placed = [];
-    for (let i = 0; i < tiles.length; i++) {
-      const tile = tiles[i];
-      if (i === 0) {
-        tile.x = centerX - tile.fullW / 2;
-        tile.y = centerY - tile.fullH / 2;
-        stamp(tile, tile.x, tile.y);
-        placed.push(tile);
-        continue;
-      }
-      let comX = 0;
-      let comY = 0;
-      let comW = 0;
-      placed.forEach(prev => {
-        if (prev.x < -1000) return;
-        const area = prev.fullW * prev.fullH;
-        comX += (prev.x + prev.fullW / 2) * area;
-        comY += (prev.y + prev.fullH / 2) * area;
-        comW += area;
-      });
-      comX = comW ? comX / comW : centerX;
-      comY = comW ? comY / comW : centerY;
-      let best = null;
-      let bestCost = Infinity;
-      let foundRing = -1;
-      const step = Math.max(GRID_STRIDE, Math.min(tile.fullW, tile.fullH) * 0.05);
-      const maxR = Math.max(width, height);
-      const phase = rand() * Math.PI * 2;
-      for (let r = 0; r <= maxR; r += step) {
-        if (foundRing >= 0 && r > foundRing + step * 2) break;
-        const samples = Math.max(36, Math.floor(r / 1.6));
-        for (let k = 0; k < samples; k++) {
-          const theta = phase + (k / samples) * Math.PI * 2;
-          const x = centerX + r * ellipseBias * Math.cos(theta) - tile.fullW / 2;
-          const y = centerY + r * Math.sin(theta) - tile.fullH / 2;
-          if (offGrid(tile, x, y) || collides(tile, x, y)) continue;
-          const dx = x + tile.fullW / 2 - comX;
-          const dy = y + tile.fullH / 2 - comY;
-          const cost = Math.hypot(dx / ellipseBias, dy) + rand() * step * 0.5;
-          if (cost < bestCost) {
-            bestCost = cost;
-            best = {x, y};
-          }
-        }
-        if (best && foundRing < 0) foundRing = r;
-      }
-      if (best) {
-        tile.x = best.x;
-        tile.y = best.y;
-        stamp(tile, tile.x, tile.y);
-      } else {
-        tile.x = -99999;
-        tile.y = -99999;
-      }
-      placed.push(tile);
-    }
-    return sourceTiles;
-  }
-
-  function clusterBounds(tiles) {
-    let left = Infinity;
-    let right = -Infinity;
-    let top = Infinity;
-    let bottom = -Infinity;
-    tiles.forEach(tile => {
-      if (tile.x < -1000) return;
-      left = Math.min(left, tile.x);
-      right = Math.max(right, tile.x + tile.fullW);
-      top = Math.min(top, tile.y);
-      bottom = Math.max(bottom, tile.y + tile.fullH);
-    });
-    if (left === Infinity) return {left: 0, right: 0, top: 0, bottom: 0};
-    return {left, right, top, bottom};
-  }
-
-  function applyImageCrop(tile) {
-    const img = tile.node.querySelector('img');
-    if (!img) return;
-    img.style.width = '100%';
-    img.style.height = '100%';
-  }
-
   function packBirds() {
-    if (collage.hidden || currentBirds.length === 0) return;
+    if (collage.hidden || currentBirds.length === 0 || !window.SilhouettePack) return;
     const nodes = Array.from(collage.querySelectorAll('.collage-bird'));
     if (nodes.length === 0) return;
 
@@ -508,73 +649,19 @@ function collage_count_class($count) {
     const height = rect.height;
     if (width < 100 || height < 100) return;
 
-    const built = buildTiles(nodes, width, height);
-    let tiles = built.tiles;
-    let placed = maskPack(tiles, width, height, built.tuning.ellipseAspectBias);
-    let bounds = clusterBounds(placed);
-
-    for (let iter = 0; iter < 10; iter++) {
-      const missing = placed.some(tile => tile.x < -1000);
-      const overflow = bounds.left < 0 || bounds.top < 0 || bounds.right > width || bounds.bottom > height;
-      if (!missing && !overflow) break;
-      let scale = 0.93;
-      if (overflow) {
-        const clusterW = bounds.right - bounds.left;
-        const clusterH = bounds.bottom - bounds.top;
-        const sx = (width * 0.96) / Math.max(clusterW, width * 0.96);
-        const sy = (height * 0.94) / Math.max(clusterH, height * 0.94);
-        scale = Math.min(scale, sx, sy);
-      }
-      tiles.forEach(tile => {
-        tile.fullW *= scale;
-        tile.fullH *= scale;
-      });
-      placed = maskPack(tiles, width, height, built.tuning.ellipseAspectBias);
-      bounds = clusterBounds(placed);
-    }
-
-    bounds = clusterBounds(placed);
-    const dx = width / 2 - (bounds.left + bounds.right) / 2;
-    const dy = height / 2 - (bounds.top + bounds.bottom) / 2;
-    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
-      placed.forEach(tile => {
-        if (tile.x > -1000) {
-          tile.x += dx;
-          tile.y += dy;
-        }
-      });
-    }
-
-    placed.forEach(tile => {
-      const hidden = tile.x < -1000;
-      tile.node.style.width = `${tile.fullW}px`;
-      tile.node.style.height = `${tile.fullH}px`;
-      tile.node.style.left = `${hidden ? -99999 : tile.x}px`;
-      tile.node.style.top = `${hidden ? -99999 : tile.y}px`;
-      tile.node.style.zIndex = String(100 + tile.idx);
-      tile.node.style.setProperty('--bird-rotate', `${tile.rotate}deg`);
-      applyImageCrop(tile);
+    const placed = window.SilhouettePack.layoutNodes({
+      nodes,
+      items: currentBirds,
+      width,
+      height
     });
+    window.SilhouettePack.applyLayout(placed);
     collagePlaced = placed.filter(tile => tile.x > -1000);
   }
 
   function maskHitTest(clientX, clientY) {
-    const box = collage.getBoundingClientRect();
-    const px = clientX - box.left;
-    const py = clientY - box.top;
-    for (let i = collagePlaced.length - 1; i >= 0; i--) {
-      const tile = collagePlaced[i];
-      if (px < tile.x || py < tile.y || px > tile.x + tile.fullW || py > tile.y + tile.fullH) continue;
-      const mx = ((px - tile.x) / tile.fullW * tile.mask.w) | 0;
-      const my = ((py - tile.y) / tile.fullH * tile.mask.h) | 0;
-      if (!tile.mask._set) {
-        const set = Object.create(null);
-        tile.mask.cells.forEach(cell => { set[`${cell[0]}|${cell[1]}`] = 1; });
-        tile.mask._set = set;
-      }
-      if (tile.mask._set[`${mx}|${my}`]) return tile;
-    }
-    return null;
+    if (!window.SilhouettePack) return null;
+    return window.SilhouettePack.hitTest(collage, collagePlaced, clientX, clientY);
   }
 
   async function refreshIndex() {
@@ -658,6 +745,13 @@ function collage_count_class($count) {
 
   closeButton.addEventListener('click', closeModal);
   modal.addEventListener('click', function(event) {
+    const play = event.target.closest && event.target.closest('.bird-modal-play');
+    if (play) {
+      event.preventDefault();
+      event.stopPropagation();
+      playModalRecording(play);
+      return;
+    }
     const regen = event.target.closest && event.target.closest('.regen-image-btn');
     if (regen) {
       event.preventDefault();

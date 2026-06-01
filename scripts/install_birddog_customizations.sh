@@ -9,6 +9,10 @@ STYLE_SRC="$REPO_DIR/config/bird_collage_style.txt"
 STYLE_DST="/etc/birdnet/bird_collage_style.txt"
 MOUNT_SRC="$REPO_DIR/templates/home-admin-BirdSongs-StreamData.mount"
 MOUNT_DST="/etc/systemd/system/home-admin-BirdSongs-StreamData.mount"
+COLLAGE_SERVICE_SRC="$REPO_DIR/templates/birdnet_collage.service"
+COLLAGE_TIMER_SRC="$REPO_DIR/templates/birdnet_collage.timer"
+COLLAGE_SERVICE_DST="/etc/systemd/system/birdnet_collage.service"
+COLLAGE_TIMER_DST="/etc/systemd/system/birdnet_collage.timer"
 
 usage() {
   cat <<'EOF'
@@ -47,6 +51,13 @@ if [ -f "$MOUNT_SRC" ]; then
   sudo systemctl enable home-admin-BirdSongs-StreamData.mount >/dev/null 2>&1 || true
 fi
 
+if [ -f "$COLLAGE_SERVICE_SRC" ] && [ -f "$COLLAGE_TIMER_SRC" ]; then
+  sudo install -m 0644 "$COLLAGE_SERVICE_SRC" "$COLLAGE_SERVICE_DST"
+  sudo install -m 0644 "$COLLAGE_TIMER_SRC" "$COLLAGE_TIMER_DST"
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now birdnet_collage.timer >/dev/null 2>&1 || true
+fi
+
 if [ "$INSTALL_DEPS" -eq 1 ]; then
   if [ ! -x "$PYTHON_BIN" ]; then
     echo "Missing BirdNET virtualenv python at $PYTHON_BIN" >&2
@@ -62,9 +73,7 @@ fi
 
 if [ -x "$PYTHON_BIN" ]; then
   "$PYTHON_BIN" -m py_compile "$REPO_DIR/scripts/bird_collage.py"
-  for hours in -1 1 12 24 168 1000000; do
-    "$PYTHON_BIN" "$REPO_DIR/scripts/bird_collage.py" --hours "$hours" --limit 28 || true
-  done
+  "$PYTHON_BIN" "$REPO_DIR/scripts/bird_collage.py" --all-ranges --limit 28 || true
 else
   echo "Skipped collage index build; $PYTHON_BIN is not present yet."
 fi

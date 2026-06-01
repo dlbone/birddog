@@ -118,3 +118,7 @@ function remove() {
 }
 alias rerc="source ~/.bashrc"
 alias vimrc="vim ~/.bashrc"
+
+# >>> Codex installer >>>
+export PATH="/home/admin/.local/bin:$PATH"
+# <<< Codex installer <<<

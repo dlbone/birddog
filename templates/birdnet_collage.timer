@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh Birddog collage indexes and missing images
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Unit=birdnet_collage.service
+
+[Install]
+WantedBy=timers.target
