@@ -24,8 +24,9 @@ the upstream licenses and BirdNET non-commercial restrictions.
 
 Tested target:
 
-- Raspberry Pi 4 or 5.
-- 64-bit Raspberry Pi OS.
+- Reference build: Raspberry Pi 4 Model B Rev 1.5.
+- Compatible target: Raspberry Pi 4 or 5.
+- 64-bit Raspberry Pi OS Bookworm.
 - USB microphone or USB audio adapter.
 - Reliable USB-C power supply for the Pi.
 - Ethernet or Wi-Fi during setup.

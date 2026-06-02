@@ -91,6 +91,27 @@ check_file "$REPO_DIR/scripts/install_birddog_customizations.sh" "Birddog custom
 check_file "$REPO_DIR/scripts/bird_collage.py" "collage generator"
 check_file "$REPO_DIR/config/bird_collage_style.txt" "collage image prompt"
 
+section "Hardware"
+if [ -r /proc/device-tree/model ]; then
+  model="$(tr -d '\0' </proc/device-tree/model)"
+  ok "$model"
+else
+  warn "Raspberry Pi model not available"
+fi
+if [ -r /etc/os-release ]; then
+  os_name="$(. /etc/os-release && printf '%s' "${PRETTY_NAME:-unknown}")"
+  ok "$os_name"
+else
+  warn "OS release not available"
+fi
+ok "architecture $(uname -m)"
+if have free; then
+  free -h | awk '/^Mem:/ { print "OK   memory " $2 " total, " $7 " available" }'
+fi
+if have df; then
+  df -h "$HOME_DIR" | awk 'NR == 2 { print "OK   home disk " $4 " free of " $2 }'
+fi
+
 section "Python"
 if [ -x "$REPO_DIR/birdnet/bin/python3" ]; then
   ok "BirdNET virtualenv python"

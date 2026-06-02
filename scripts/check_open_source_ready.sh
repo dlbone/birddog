@@ -60,9 +60,11 @@ run_check "customization installer help" sh -c 'scripts/install_birddog_customiz
 run_check "install.sh preflight" ./install.sh --check --skip-birdnet --skip-python-deps
 run_check "customization installer preflight" scripts/install_birddog_customizations.sh --check
 run_check "install.sh accepts GEMINI_API_KEY env" sh -c \
-  'GEMINI_API_KEY=test-key ./install.sh --check --skip-birdnet --skip-python-deps | grep -q "Gemini key provided by GEMINI_API_KEY"'
+  'GEMINI_API_KEY=test-key ./install.sh --check --skip-birdnet --skip-python-deps >/tmp/birddog-install-envcheck.out && grep -q "Gemini key provided by GEMINI_API_KEY" /tmp/birddog-install-envcheck.out'
+rm -f /tmp/birddog-install-envcheck.out
 run_check "customization installer accepts GEMINI_API_KEY env" sh -c \
-  'GEMINI_API_KEY=test-key scripts/install_birddog_customizations.sh --check | grep -q "Gemini key provided by GEMINI_API_KEY"'
+  'GEMINI_API_KEY=test-key scripts/install_birddog_customizations.sh --check >/tmp/birddog-custom-envcheck.out && grep -q "Gemini key provided by GEMINI_API_KEY" /tmp/birddog-custom-envcheck.out'
+rm -f /tmp/birddog-custom-envcheck.out
 if ./install.sh --gemini-key >/tmp/birddog-install-argcheck.out 2>&1; then
   fail "install.sh rejects missing --gemini-key value"
 else

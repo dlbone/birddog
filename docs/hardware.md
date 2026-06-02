@@ -4,7 +4,23 @@ This is the hardware class Birddog is designed around. BirdNET-Pi can run on
 other machines, but this setup has enough headroom for the collage UI, image
 processing, and continuous recording.
 
-## Known-Good Setup
+## Reference Build
+
+This repo is maintained against this class of setup:
+
+- Raspberry Pi 4 Model B Rev 1.5.
+- 64-bit Raspberry Pi OS Bookworm.
+- USB-C power supply dedicated to powering the Pi.
+- USB microphone or USB audio adapter connected through a USB-A port.
+- Microphone placed outside on a covered porch/back porch area.
+- Wi-Fi or Ethernet on the home network.
+- Optional Tailscale for phone/laptop access away from home.
+
+The exact USB microphone model is not important to Birddog; it just needs to
+show up as an ALSA recording device (`arecord -l`). If it does not, BirdNET-Pi
+will not hear anything and the collage will not update with real detections.
+
+## Compatible Setup
 
 - Raspberry Pi 4 or Raspberry Pi 5.
 - 64-bit Raspberry Pi OS Bookworm.
@@ -13,6 +29,16 @@ processing, and continuous recording.
 - microSD card or SSD with enough space for recordings.
 - Wi-Fi or Ethernet.
 - Optional Tailscale for remote access.
+
+## Shopping Checklist
+
+- Raspberry Pi 4/5.
+- Official or high-quality USB-C power adapter for that Pi model.
+- 32 GB or larger microSD card; use an SSD if preserving lots of recordings.
+- USB microphone, USB sound card with microphone input, or a powered USB hub
+  plus microphone if the mic is unstable from Pi power alone.
+- Foam windscreen or sheltered enclosure for outdoor/porch placement.
+- Weather-safe extension/placement plan; do not expose the mic directly to rain.
 
 ## Microphone Placement
 
