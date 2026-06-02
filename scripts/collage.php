@@ -96,9 +96,6 @@ function collage_window_label($hours) {
     <div class="collage-toolbar">
       <p>Passeriformes <span>/</span> Aves</p>
       <div class="collage-toolbar-actions">
-        <button class="collage-label-toggle" type="button" aria-pressed="false" aria-label="Show all bird labels">
-          labels
-        </button>
         <a class="collage-menu" href="views.php?view=Overview">menu</a>
       </div>
     </div>
@@ -164,7 +161,6 @@ function collage_window_label($hours) {
   const collage = document.querySelector('.bird-collage');
   const empty = document.querySelector('.collage-empty');
   const recentList = document.querySelector('.field-recent-list');
-  const labelToggle = document.querySelector('.collage-label-toggle');
   const modal = document.querySelector('.bird-modal');
   const modalArt = modal.querySelector('.bird-modal-art');
   const modalTitle = modal.querySelector('#bird-modal-title');
@@ -181,36 +177,6 @@ function collage_window_label($hours) {
   let pollDelay = 5000;
   let activeModalSci = '';
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
-
-  function readStoredShowAllLabels() {
-    try {
-      return localStorage.getItem('birddog:collage-labels') === 'shown';
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function writeStoredShowAllLabels(show) {
-    try {
-      localStorage.setItem('birddog:collage-labels', show ? 'shown' : 'normal');
-    } catch (error) {}
-  }
-
-  function setShowAllLabels(show) {
-    document.body.classList.toggle('collage-labels-shown', show);
-    if (labelToggle) {
-      labelToggle.setAttribute('aria-pressed', show ? 'true' : 'false');
-      labelToggle.setAttribute('aria-label', show ? 'Show labels only on hover' : 'Show all bird labels');
-    }
-    writeStoredShowAllLabels(show);
-  }
-
-  setShowAllLabels(readStoredShowAllLabels());
-  if (labelToggle) {
-    labelToggle.addEventListener('click', function() {
-      setShowAllLabels(labelToggle.getAttribute('aria-pressed') !== 'true');
-    });
-  }
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, function(char) {

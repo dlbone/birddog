@@ -63,7 +63,8 @@ export GEMINI_API_KEY='YOUR_GEMINI_API_KEY'
 Warnings about sudo credentials are normal; the real install will prompt when
 needed. A microphone warning means the install can continue, but real bird
 detections will not work until `arecord -l` shows a recording device. Fix any
-`FAIL` lines before continuing.
+`FAIL` lines before continuing. Memory or disk warnings mean the Pi may install
+or record poorly; use a larger card/SSD or a Pi with more RAM if possible.
 
 ## 6. Install
 

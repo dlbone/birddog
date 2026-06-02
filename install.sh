@@ -109,6 +109,26 @@ preflight() {
     echo "WARN arecord is not installed yet; microphone check skipped"
   fi
 
+  if [ -r /proc/meminfo ]; then
+    local mem_kb
+    mem_kb="$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)"
+    if [ -n "$mem_kb" ] && [ "$mem_kb" -ge 900000 ]; then
+      echo "OK   memory available: $((mem_kb / 1024)) MB"
+    else
+      echo "WARN low memory detected; Raspberry Pi 4/5 with at least 1 GB is recommended"
+    fi
+  fi
+
+  if command -v df >/dev/null 2>&1; then
+    local free_kb
+    free_kb="$(df -Pk "$REPO_DIR" | awk 'NR == 2 { print $4 }')"
+    if [ -n "$free_kb" ] && [ "$free_kb" -ge 4194304 ]; then
+      echo "OK   disk space available: $((free_kb / 1024)) MB"
+    else
+      echo "WARN low disk space detected; keep at least 4 GB free for install and recordings"
+    fi
+  fi
+
   for path in \
     "$REPO_DIR/scripts/install_birdnet.sh" \
     "$REPO_DIR/scripts/install_birddog_customizations.sh" \

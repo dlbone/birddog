@@ -447,8 +447,7 @@ button:hover {
 }
 
 .collage-range a,
-.collage-menu,
-.collage-label-toggle {
+.collage-menu {
   min-width: 0;
   border-radius: 0;
   padding: 0;
@@ -462,8 +461,7 @@ button:hover {
 }
 
 .collage-range a.active,
-.collage-menu,
-.collage-label-toggle[aria-pressed="true"] {
+.collage-menu {
   background: transparent;
   color: #8b371e;
   box-shadow: none;
@@ -648,17 +646,6 @@ button:hover {
   box-sizing: border-box;
 }
 
-.collage-label-toggle {
-  width: auto;
-  display: inline-grid;
-  place-items: center;
-  border: 0;
-  background: transparent;
-  text-transform: lowercase;
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
 .collage-header {
   align-self: start;
   justify-self: center;
@@ -804,10 +791,6 @@ button:hover {
 
 .collage-bird.is-hover figcaption,
 .collage-bird:focus-visible figcaption {
-  display: block;
-}
-
-.collage-labels-shown .collage-bird figcaption {
   display: block;
 }
 
@@ -1530,8 +1513,7 @@ button:hover {
     justify-content: flex-start;
   }
   .collage-range a,
-  .collage-menu,
-  .collage-label-toggle {
+  .collage-menu {
     min-width: 38px;
     padding: 0;
     letter-spacing: 1.2px;
@@ -1570,8 +1552,7 @@ button:hover {
     padding-left: 0;
     background: transparent;
   }
-  .collage-menu,
-  .collage-label-toggle {
+  .collage-menu {
     width: auto;
   }
   .collage-kicker {
@@ -1596,7 +1577,6 @@ button:hover {
   .bird-count-some .collage-bird figcaption {
     display: none;
   }
-  .collage-labels-shown .collage-bird figcaption,
   .collage-bird.is-hover figcaption,
   .collage-bird:focus-visible figcaption {
     display: block;

@@ -60,6 +60,10 @@ run_check "customization installer help" sh -c 'scripts/install_birddog_customiz
 run_check "install.sh preflight" ./install.sh --check --skip-birdnet --skip-python-deps
 run_check "install.sh preflight checks microphone visibility" sh -c \
   './install.sh --check --skip-birdnet --skip-python-deps >/tmp/birddog-install-preflight.out && grep -Eq "ALSA recording device visible|no ALSA recording device visible|arecord is not installed" /tmp/birddog-install-preflight.out'
+run_check "install.sh preflight checks memory" sh -c \
+  'test -s /tmp/birddog-install-preflight.out && grep -Eq "memory available|low memory detected" /tmp/birddog-install-preflight.out'
+run_check "install.sh preflight checks disk" sh -c \
+  'test -s /tmp/birddog-install-preflight.out && grep -Eq "disk space available|low disk space detected" /tmp/birddog-install-preflight.out'
 rm -f /tmp/birddog-install-preflight.out
 run_check "customization installer preflight" scripts/install_birddog_customizations.sh --check
 run_check "install.sh accepts GEMINI_API_KEY env" sh -c \
