@@ -68,6 +68,20 @@ function collage_window_label($hours) {
   if ($hours === 168) return 'last 7 days';
   return 'all time';
 }
+
+function collage_daily_note() {
+  $notes = [
+    ['Tiny beaks at dawn.', 'The yard keeps soft secrets.'],
+    ['Feathers sign the sky.', 'Morning answers in chirps.'],
+    ['A little wing report.', 'Filed under sunshine.'],
+    ['Small songs drift in.', 'The porch becomes a page.'],
+    ['Bright calls, quick hops.', 'Breakfast news from branches.'],
+    ['Soft wings clock in.', 'The day starts with whistles.'],
+    ['A beak taps hello.', 'The garden writes back.'],
+  ];
+  return $notes[intval(date('z')) % count($notes)];
+}
+$daily_note = collage_daily_note();
 ?>
 <div class="collage-page">
   <aside class="field-guide-rail" aria-label="Observation controls and summary">
@@ -90,7 +104,7 @@ function collage_window_label($hours) {
       <p><span>Window</span><?php echo htmlspecialchars(collage_window_label($requested_hours)); ?></p>
       <p><span>Source</span>Auto-detected</p>
     </section>
-    <p class="field-script-note">Dawn chorus log.<br>Birds listed by most recent detections.</p>
+    <p class="field-script-note"><?php echo htmlspecialchars($daily_note[0]); ?><br><?php echo htmlspecialchars($daily_note[1]); ?></p>
   </aside>
   <main class="field-guide-plate">
     <div class="collage-toolbar">
