@@ -14,6 +14,12 @@ STYLE_DST="/etc/birdnet/bird_collage_style.txt"
 COLLAGE_TIMER_SRC="$REPO_DIR/templates/birdnet_collage.timer"
 COLLAGE_SERVICE_DST="/etc/systemd/system/birdnet_collage.service"
 COLLAGE_TIMER_DST="/etc/systemd/system/birdnet_collage.timer"
+COLLAGE_DB_PATH="$REPO_DIR/scripts/birds.db"
+COLLAGE_PATH_DST="/etc/systemd/system/birdnet_collage.path"
+COLLAGE_DEBOUNCE_SERVICE_DST="/etc/systemd/system/birdnet_collage_debounce.service"
+ANALYSIS_SERVICE_DST="/etc/systemd/system/birdnet_analysis.service"
+STATS_SERVICE_DST="/etc/systemd/system/birdnet_stats.service"
+BIRDDOG_CONF="/etc/birdnet/birdnet.conf"
 
 usage() {
   cat <<'EOF'
@@ -48,6 +54,18 @@ need_arg() {
     usage
     exit 2
   fi
+}
+
+ensure_birddog_conf_value() {
+  local key="$1"
+  local value="$2"
+  if ! [ -f "$BIRDDOG_CONF" ]; then
+    return 0
+  fi
+  if grep -Eq "^${key}=" "$BIRDDOG_CONF"; then
+    return 0
+  fi
+  echo "${key}=${value}" | sudo tee -a "$BIRDDOG_CONF" >/dev/null
 }
 
 while [ "$#" -gt 0 ]; do
@@ -147,6 +165,7 @@ preflight() {
   echo "INFO stream data directory: $STREAM_DIR"
   echo "INFO stream mount unit: $stream_unit"
   echo "INFO collage timer unit: birdnet_collage.timer"
+  echo "INFO core services repaired: birdnet_analysis.service birdnet_stats.service"
   echo "INFO install user/group: $INSTALL_USER:$INSTALL_GROUP"
 
   if [ "$ok" -eq 1 ]; then
@@ -175,6 +194,11 @@ ensure_sudo
 mkdir -p "$COLLAGE_DIR/images"
 mkdir -p "$STREAM_DIR"
 sudo mkdir -p /etc/birdnet
+ensure_birddog_conf_value "LIVESTREAM_BITRATE" "128k"
+ensure_birddog_conf_value "LIVESTREAM_CHANNELS" "1"
+ensure_birddog_conf_value "STREAM_BACKLOG_MAX_FILES" "180"
+ensure_birddog_conf_value "STREAM_BACKLOG_MAX_AGE_SECONDS" "1800"
+ensure_birddog_conf_value "REPORT_QUEUE_MAX" "128"
 
 if [ -n "$GEMINI_KEY" ]; then
   tmp_key="$(mktemp)"
@@ -236,7 +260,11 @@ install_collage_timer() {
     echo "Missing $COLLAGE_TIMER_SRC; skipping collage timer install." >&2
     return 0
   fi
+  if [ ! -f "$COLLAGE_DB_PATH" ]; then
+    echo "Missing BirdNET detections DB: $COLLAGE_DB_PATH; skipping collage db path trigger." >&2
+  fi
   local tmp_service
+  local tmp_debounce_service
   tmp_service="$(mktemp)"
   cat > "$tmp_service" <<EOF
 [Unit]
@@ -249,15 +277,99 @@ User=$INSTALL_USER
 Group=$INSTALL_GROUP
 Environment=HOME=$HOME_DIR
 WorkingDirectory=$REPO_DIR
-ExecStart=$PYTHON_BIN $REPO_DIR/scripts/bird_collage.py --all-ranges --limit 28 --generate --variant both --max-new 2
+ExecStart=$PYTHON_BIN $REPO_DIR/scripts/bird_collage.py --all-ranges --if-stale --limit 28 --generate --variant both --max-new 2
 EOF
   sudo install -m 0644 "$tmp_service" "$COLLAGE_SERVICE_DST"
   rm -f "$tmp_service"
+  tmp_debounce_service="$(mktemp)"
+  cat > "$tmp_debounce_service" <<EOF
+[Unit]
+Description=Debounced Birddog collage refresh after detection DB writes
+
+[Service]
+Type=oneshot
+User=$INSTALL_USER
+Group=$INSTALL_GROUP
+Environment=HOME=$HOME_DIR
+WorkingDirectory=$REPO_DIR
+ExecStartPre=/bin/sleep 20
+ExecStart=$PYTHON_BIN $REPO_DIR/scripts/bird_collage.py --all-ranges --if-stale --limit 28 --skip-enrich
+EOF
+  sudo install -m 0644 "$tmp_debounce_service" "$COLLAGE_DEBOUNCE_SERVICE_DST"
+  rm -f "$tmp_debounce_service"
   sudo install -m 0644 "$COLLAGE_TIMER_SRC" "$COLLAGE_TIMER_DST"
+  local tmp_path_unit
+  tmp_path_unit="$(mktemp)"
+  cat > "$tmp_path_unit" <<EOF
+[Unit]
+Description=Trigger birddog collage rebuilds from detection DB writes
+
+[Path]
+PathModified=$COLLAGE_DB_PATH
+PathChanged=$COLLAGE_DB_PATH
+Unit=birdnet_collage_debounce.service
+TriggerLimitIntervalSec=1min
+TriggerLimitBurst=20
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  sudo install -m 0644 "$tmp_path_unit" "$COLLAGE_PATH_DST"
+  rm -f "$tmp_path_unit"
   sudo systemctl daemon-reload
   sudo systemctl enable --now birdnet_collage.timer >/dev/null 2>&1 || true
+  sudo systemctl enable --now birdnet_collage.path >/dev/null 2>&1 || true
 }
 
+install_core_services() {
+  local tmp_analysis
+  local tmp_stats
+
+  tmp_analysis="$(mktemp)"
+  cat > "$tmp_analysis" <<EOF
+[Unit]
+Description=BirdNET Analysis
+
+[Service]
+Restart=always
+Type=simple
+RestartSec=2
+User=$INSTALL_USER
+Environment=HOME=$HOME_DIR
+WorkingDirectory=$REPO_DIR
+ExecStart=$PYTHON_BIN /usr/local/bin/birdnet_analysis.py
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  tmp_stats="$(mktemp)"
+  cat > "$tmp_stats" <<EOF
+[Unit]
+Description=BirdNET Stats
+
+[Service]
+Restart=on-failure
+RestartSec=5
+Type=simple
+User=$INSTALL_USER
+Environment=HOME=$HOME_DIR
+WorkingDirectory=$REPO_DIR
+ExecStart=$REPO_DIR/birdnet/bin/streamlit run $REPO_DIR/scripts/plotly_streamlit.py --browser.gatherUsageStats false --server.address localhost --server.baseUrlPath /stats
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  sudo install -m 0644 "$tmp_analysis" "$ANALYSIS_SERVICE_DST"
+  sudo install -m 0644 "$tmp_stats" "$STATS_SERVICE_DST"
+  rm -f "$tmp_analysis" "$tmp_stats"
+  sudo systemctl daemon-reload
+  sudo systemctl enable birdnet_analysis.service >/dev/null 2>&1 || true
+  sudo systemctl enable birdnet_stats.service >/dev/null 2>&1 || true
+}
+
+install_core_services
 install_stream_mount
 install_collage_timer
 
@@ -276,7 +388,7 @@ fi
 
 if [ -x "$PYTHON_BIN" ]; then
   "$PYTHON_BIN" -m py_compile "$REPO_DIR/scripts/bird_collage.py"
-  "$PYTHON_BIN" "$REPO_DIR/scripts/bird_collage.py" --all-ranges --limit 28 || true
+  "$PYTHON_BIN" "$REPO_DIR/scripts/bird_collage.py" --all-ranges --limit 28 --skip-enrich || true
 else
   echo "Skipped collage index build; $PYTHON_BIN is not present yet."
 fi

@@ -12,15 +12,24 @@ from .models import get_model
 log = logging.getLogger(__name__)
 
 MODEL = None
+CUSTOM_SPECIES_LIST_CACHE = {}
 
 
 def loadCustomSpeciesList(path):
-    species_list = []
-    if os.path.isfile(path):
-        with open(path, 'r') as csfile:
-            species_list = [line.strip().split('_')[0] for line in csfile.readlines()]
-
-    return species_list
+    try:
+        stat = os.stat(path)
+        stamp = (stat.st_mtime_ns, stat.st_size)
+    except FileNotFoundError:
+        stamp = None
+    cached = CUSTOM_SPECIES_LIST_CACHE.get(path)
+    if cached is None or cached[0] != stamp:
+        species_list = []
+        if stamp is not None:
+            with open(path, 'r') as csfile:
+                species_list = [line.strip().split('_')[0] for line in csfile.readlines()]
+        cached = (stamp, species_list)
+        CUSTOM_SPECIES_LIST_CACHE[path] = cached
+    return list(cached[1])
 
 
 def splitSignal(sig, rate, overlap, seconds=3.0, minlen=1.5):
@@ -45,7 +54,7 @@ def splitSignal(sig, rate, overlap, seconds=3.0, minlen=1.5):
 
 
 def readAudioData(path, overlap, sample_rate, chunk_duration):
-    log.info('READING AUDIO DATA...')
+    log.debug('READING AUDIO DATA...')
 
     # Open file with librosa (uses ffmpeg or libav)
     sig, rate = librosa.load(path, sr=sample_rate, mono=True, res_type='kaiser_fast')
@@ -53,17 +62,17 @@ def readAudioData(path, overlap, sample_rate, chunk_duration):
     # Split audio into chunks
     chunks = splitSignal(sig, rate, overlap, seconds=chunk_duration)
 
-    log.info('READING DONE! READ %d CHUNKS.', len(chunks))
+    log.debug('READING DONE! READ %d CHUNKS.', len(chunks))
 
     return chunks
 
 
-def analyzeAudioData(chunks, overlap, lat, lon, week):
+def analyzeAudioData(chunks, overlap, lat, lon, week, conf=None):
     detections = []
     model = load_global_model()
 
     start = time.time()
-    log.info('ANALYZING AUDIO...')
+    log.debug('ANALYZING AUDIO...')
 
     model.set_meta_data(lat, lon, week)
     predicted_species_list = model.get_species_list()
@@ -76,7 +85,7 @@ def analyzeAudioData(chunks, overlap, lat, lon, week):
 
     labeled = {}
     pred_start = 0.0
-    for p in filter_humans(detections):
+    for p in filter_humans(detections, conf):
         # Save timestamp and result
         pred_end = pred_start + model.chunk_duration
         labeled[str(pred_start) + ';' + str(pred_end)] = p
@@ -87,8 +96,9 @@ def analyzeAudioData(chunks, overlap, lat, lon, week):
     return labeled, predicted_species_list
 
 
-def filter_humans(predictions):
-    conf = get_settings()
+def filter_humans(predictions, conf=None):
+    if conf is None:
+        conf = get_settings()
     priv_thresh = conf.getfloat('PRIVACY_THRESHOLD')
     human_cutoff = max(10, int(6000 * priv_thresh / 100.0))
     log.debug("HUMAN-CUTOFF AT: %d", human_cutoff)
@@ -102,8 +112,11 @@ def filter_humans(predictions):
     # mask for humans
     human_mask = [False] * len(predictions)
     for i, prediction in enumerate(predictions):
-        for p in prediction[:human_cutoff]:
-            if 'Human' in p[0]:
+        limit = min(human_cutoff, len(prediction))
+        for j in range(limit):
+            # Direct prefix check is cheaper than generic substring search and
+            # avoids creating a slice each iteration.
+            if prediction[j][0].startswith('Human'):
                 human_mask[i] = True
                 break
 
@@ -138,42 +151,50 @@ def load_global_model():
 
 
 def run_analysis(file):
-    include_list = loadCustomSpeciesList(os.path.expanduser("~/BirdNET-Pi/include_species_list.txt"))
-    exclude_list = loadCustomSpeciesList(os.path.expanduser("~/BirdNET-Pi/exclude_species_list.txt"))
-    whitelist_list = loadCustomSpeciesList(os.path.expanduser("~/BirdNET-Pi/whitelist_species_list.txt"))
+    include_set = set(loadCustomSpeciesList(os.path.expanduser("~/BirdNET-Pi/include_species_list.txt")))
+    exclude_set = set(loadCustomSpeciesList(os.path.expanduser("~/BirdNET-Pi/exclude_species_list.txt")))
+    whitelist_set = set(loadCustomSpeciesList(os.path.expanduser("~/BirdNET-Pi/whitelist_species_list.txt")))
 
     conf = get_settings()
     model = load_global_model()
-    names = get_language(conf['DATABASE_LANG'])
+    names = get_language(conf['DATABASE_LANG'], copy=False)
+    overlap = conf.getfloat('OVERLAP')
+    confidence_cutoff = conf.getfloat('CONFIDENCE')
+    latitude = conf.getfloat('LATITUDE')
+    longitude = conf.getfloat('LONGITUDE')
+    include_active = len(include_set) != 0
+    exclude_active = len(exclude_set) != 0
 
     # Read audio data & handle errors
     try:
-        audio_data = readAudioData(file.file_name, conf.getfloat('OVERLAP'), model.sample_rate, model.chunk_duration)
+        audio_data = readAudioData(file.file_name, overlap, model.sample_rate, model.chunk_duration)
     except (NameError, TypeError) as e:
         log.error("Error with the following info: %s", e)
         return []
 
     # Process audio data and get detections
-    raw_detections, predicted_species_list = analyzeAudioData(audio_data, conf.getfloat('OVERLAP'), conf.getfloat('LATITUDE'),
-                                                              conf.getfloat('LONGITUDE'), file.week)
+    raw_detections, predicted_species_list = analyzeAudioData(audio_data, overlap, latitude, longitude, file.week, conf)
+    predicted_species_set = set(predicted_species_list)
+    occurrence_filter_active = len(predicted_species_set) != 0
     confident_detections = []
     for time_slot, entries in raw_detections.items():
         sci_name, confidence = entries[0]
-        log.info('%s-(%s_%s, %s)', time_slot, sci_name, names.get(sci_name, sci_name), confidence)
+        log.debug('%s-(%s_%s, %s)', time_slot, sci_name, names.get(sci_name, sci_name), confidence)
         for sci_name, confidence in entries:
-            if confidence >= conf.getfloat('CONFIDENCE'):
+            if confidence >= confidence_cutoff:
                 com_name = names.get(sci_name, sci_name)
-                if sci_name not in include_list and len(include_list) != 0:
+                if include_active and sci_name not in include_set:
                     log.warning("Excluded as INCLUDE_LIST is active but this species is not in it: %s %s", sci_name, com_name)
-                elif sci_name in exclude_list and len(exclude_list) != 0:
+                elif exclude_active and sci_name in exclude_set:
                     log.warning("Excluded as species in EXCLUDE_LIST: %s %s", sci_name, com_name)
-                elif sci_name not in predicted_species_list and len(predicted_species_list) != 0 and sci_name not in whitelist_list:
+                elif occurrence_filter_active and sci_name not in predicted_species_set and sci_name not in whitelist_set:
                     log.warning("Excluded as below Species Occurrence Frequency Threshold: %s %s", sci_name, com_name)
                 else:
+                    start, stop = time_slot.split(';')
                     d = Detection(
                         file.file_date,
-                        time_slot.split(';')[0],
-                        time_slot.split(';')[1],
+                        start,
+                        stop,
                         sci_name,
                         com_name,
                         confidence,

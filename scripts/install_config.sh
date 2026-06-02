@@ -219,6 +219,16 @@ FREQSHIFT_PITCH=-1500
 
 CHANNELS=2
 
+## LIVESTREAM_BITRATE is the MP3 bitrate used for the live stream.
+## Lower values reduce Pi CPU/bandwidth. 128k is a balanced default.
+
+LIVESTREAM_BITRATE=128k
+
+## LIVESTREAM_CHANNELS controls the number of output channels for the live
+## stream. Setting this to 1 significantly reduces CPU usage.
+
+LIVESTREAM_CHANNELS=1
+
 ## PRIVACY_THRESHOLD can be set to enable sensitivity to Human sounds. This
 ## setting is an effort to introduce privacy into the data collection.
 ## The PRIVACY_THRESHOLD value represents a percentage of the entire species
@@ -232,6 +242,21 @@ PRIVACY_THRESHOLD=0
 ## analyze.
 
 RECORDING_LENGTH=15
+
+## STREAM_BACKLOG_MAX_FILES limits how many StreamData WAVs we keep for analysis.
+## Lower values reduce disk I/O and keep detection latency high after long run times.
+
+STREAM_BACKLOG_MAX_FILES=180
+
+## STREAM_BACKLOG_MAX_AGE_SECONDS removes StreamData WAVs older than this age (seconds).
+## Set to 0 to disable age-based pruning; leave as-is for safer Pi storage use.
+
+STREAM_BACKLOG_MAX_AGE_SECONDS=1800
+
+## REPORT_QUEUE_MAX caps pending reporting rows waiting for DB/file writes.
+## Lower values reduce RAM spikes under load; higher values can improve burst throughput.
+
+REPORT_QUEUE_MAX=128
 
 ## EXTRACTION_LENGTH sets the length of the audio extractions that will be made
 ## from each BirdNET-Lite detection. An empty value will use the default of 6

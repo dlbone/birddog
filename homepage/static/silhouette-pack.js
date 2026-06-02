@@ -2,29 +2,118 @@
   'use strict';
 
   const DEFAULT_GRID_STRIDE = 4;
+  const MASK_CACHE_LIMIT = 96;
+  const maskCache = new Map();
+  let fallbackMaskCache = null;
+
+  function cachedMask(key, build) {
+    if (maskCache.has(key)) {
+      const value = maskCache.get(key);
+      maskCache.delete(key);
+      maskCache.set(key, value);
+      return value;
+    }
+    const value = build();
+    maskCache.set(key, value);
+    if (maskCache.size > MASK_CACHE_LIMIT) {
+      maskCache.delete(maskCache.keys().next().value);
+    }
+    return value;
+  }
+
+  function attachRuns(raw) {
+    if (!raw || !raw.w || !raw.h || !raw._bitmap || raw._runY) return raw;
+    const ys = [];
+    const x0s = [];
+    const x1s = [];
+    for (let y = 0; y < raw.h; y++) {
+      const row = y * raw.w;
+      let x = 0;
+      while (x < raw.w) {
+        while (x < raw.w && !raw._bitmap[row + x]) x++;
+        if (x >= raw.w) break;
+        const x0 = x;
+        while (x < raw.w && raw._bitmap[row + x]) x++;
+        ys.push(y);
+        x0s.push(x0);
+        x1s.push(x - 1);
+      }
+    }
+    raw._runY = Uint16Array.from(ys);
+    raw._runX0 = Uint16Array.from(x0s);
+    raw._runX1 = Uint16Array.from(x1s);
+    raw._runCount = raw._runY.length;
+    return raw;
+  }
+
+  function attachMaskData(raw) {
+    if (!raw || !raw.w || !raw.h) return raw;
+    if (raw._bitmap && raw._runY) return raw;
+    if (!raw.cells) return raw;
+    if (raw._cacheKey) {
+      const cached = cachedMask(raw._cacheKey, function() {
+        const bitmap = new Uint8Array(raw.w * raw.h);
+        raw.cells.forEach(cell => {
+          const x = cell[0] | 0;
+          const y = cell[1] | 0;
+          if (x >= 0 && y >= 0 && x < raw.w && y < raw.h) bitmap[y * raw.w + x] = 1;
+        });
+        return attachRuns({w: raw.w, h: raw.h, _bitmap: bitmap});
+      });
+      raw._bitmap = cached._bitmap;
+      raw._runY = cached._runY;
+      raw._runX0 = cached._runX0;
+      raw._runX1 = cached._runX1;
+      raw._runCount = cached._runCount;
+      return raw;
+    }
+    const bitmap = new Uint8Array(raw.w * raw.h);
+    raw.cells.forEach(cell => {
+      const x = cell[0] | 0;
+      const y = cell[1] | 0;
+      if (x >= 0 && y >= 0 && x < raw.w && y < raw.h) bitmap[y * raw.w + x] = 1;
+    });
+    raw._bitmap = bitmap;
+    return attachRuns(raw);
+  }
 
   function decodeMask(raw) {
-    if (!raw || !raw.w || !raw.h || !raw.bits) return null;
-    if (raw.cells) return raw;
-    const bin = atob(raw.bits);
-    const cells = [];
-    const total = raw.w * raw.h;
-    for (let i = 0; i < total; i++) {
-      const byte = bin.charCodeAt(i >> 3);
-      if (byte & (1 << (7 - (i & 7)))) cells.push([i % raw.w, Math.floor(i / raw.w)]);
-    }
-    raw.cells = cells;
+    if (!raw || !raw.w || !raw.h) return null;
+    if (raw.cells) return attachMaskData(raw);
+    if (!raw.bits) return null;
+    if (!raw._cacheKey) raw._cacheKey = `${raw.w}x${raw.h}:${raw.bits}`;
+    const cached = cachedMask(raw._cacheKey, function() {
+      const bin = atob(raw.bits);
+      const total = raw.w * raw.h;
+      const bitmap = new Uint8Array(total);
+      for (let i = 0; i < total; i++) {
+        const byte = bin.charCodeAt(i >> 3);
+        if (byte & (1 << (7 - (i & 7)))) {
+          bitmap[i] = 1;
+        }
+      }
+      return attachRuns({w: raw.w, h: raw.h, bits: raw.bits, _bitmap: bitmap});
+    });
+    raw._bitmap = cached._bitmap;
+    raw._runY = cached._runY;
+    raw._runX0 = cached._runX0;
+    raw._runX1 = cached._runX1;
+    raw._runCount = cached._runCount;
     return raw;
   }
 
   function fallbackMask() {
+    if (fallbackMaskCache) return fallbackMaskCache;
     const w = 32;
     const h = 32;
-    const cells = [];
+    const bitmap = new Uint8Array(w * h);
     for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) cells.push([x, y]);
+      for (let x = 0; x < w; x++) {
+        bitmap[y * w + x] = 1;
+      }
     }
-    return {w, h, cells};
+    fallbackMaskCache = attachRuns({w, h, _bitmap: bitmap});
+    return fallbackMaskCache;
   }
 
   function tuning(n) {
@@ -87,6 +176,7 @@
     const gridW = Math.max(1, Math.ceil(width / gridStride));
     const gridH = Math.max(1, Math.ceil(height / gridStride));
     const grid = new Uint8Array(gridW * gridH);
+    const rowHasAny = new Uint8Array(gridH);
     const centerX = width / 2;
     const centerY = height / 2;
     let seed = 0x9E3779B9;
@@ -94,40 +184,55 @@
       seed = (seed * 16807) % 2147483647;
       return seed / 2147483647;
     }
-    function cellRange(tile, tx, ty, cell) {
+    function collides(tile, tx, ty) {
       const sx = tile.fullW / tile.mask.w;
       const sy = tile.fullH / tile.mask.h;
-      let x0 = ((tx + cell[0] * sx) / gridStride) | 0;
-      let y0 = ((ty + cell[1] * sy) / gridStride) | 0;
-      let x1 = ((tx + (cell[0] + 1) * sx) / gridStride) | 0;
-      let y1 = ((ty + (cell[1] + 1) * sy) / gridStride) | 0;
-      if (x0 < 0) x0 = 0;
-      if (y0 < 0) y0 = 0;
-      if (x1 >= gridW) x1 = gridW - 1;
-      if (y1 >= gridH) y1 = gridH - 1;
-      return [x0, y0, x1, y1];
-    }
-    function offGrid(tile, tx, ty) {
-      return tx < 0 || ty < 0 || tx + tile.fullW > width || ty + tile.fullH > height;
-    }
-    function collides(tile, tx, ty) {
-      for (const cell of tile.mask.cells) {
-        const range = cellRange(tile, tx, ty, cell);
-        for (let gy = range[1]; gy <= range[3]; gy++) {
+      const runY = tile.mask._runY;
+      const runX0 = tile.mask._runX0;
+      const runX1 = tile.mask._runX1;
+      const count = tile.mask._runCount || 0;
+      for (let i = 0; i < count; i++) {
+        let x0 = ((tx + runX0[i] * sx) / gridStride) | 0;
+        let y0 = ((ty + runY[i] * sy) / gridStride) | 0;
+        let x1 = ((tx + (runX1[i] + 1) * sx) / gridStride) | 0;
+        let y1 = ((ty + (runY[i] + 1) * sy) / gridStride) | 0;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 >= gridW) x1 = gridW - 1;
+        if (y1 >= gridH) y1 = gridH - 1;
+        for (let gy = y0; gy <= y1; gy++) {
+          if (!rowHasAny[gy]) continue;
           const off = gy * gridW;
-          for (let gx = range[0]; gx <= range[2]; gx++) {
-            if (grid[off + gx]) return true;
-          }
+          const start = off + x0;
+          const hit = grid.indexOf(1, start);
+          if (hit !== -1 && hit <= off + x1) return true;
         }
       }
       return false;
     }
+    function offGrid(tile, tx, ty) {
+      return tx < 0 || ty < 0 || tx + tile.fullW > width || ty + tile.fullH > height;
+    }
     function stamp(tile, tx, ty) {
-      for (const cell of tile.mask.cells) {
-        const range = cellRange(tile, tx, ty, cell);
-        for (let gy = range[1]; gy <= range[3]; gy++) {
+      const sx = tile.fullW / tile.mask.w;
+      const sy = tile.fullH / tile.mask.h;
+      const runY = tile.mask._runY;
+      const runX0 = tile.mask._runX0;
+      const runX1 = tile.mask._runX1;
+      const count = tile.mask._runCount || 0;
+      for (let i = 0; i < count; i++) {
+        let x0 = ((tx + runX0[i] * sx) / gridStride) | 0;
+        let y0 = ((ty + runY[i] * sy) / gridStride) | 0;
+        let x1 = ((tx + (runX1[i] + 1) * sx) / gridStride) | 0;
+        let y1 = ((ty + (runY[i] + 1) * sy) / gridStride) | 0;
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 >= gridW) x1 = gridW - 1;
+        if (y1 >= gridH) y1 = gridH - 1;
+        for (let gy = y0; gy <= y1; gy++) {
           const off = gy * gridW;
-          for (let gx = range[0]; gx <= range[2]; gx++) grid[off + gx] = 1;
+          rowHasAny[gy] = 1;
+          grid.fill(1, off + x0, off + x1 + 1);
         }
       }
     }
@@ -278,12 +383,9 @@
       if (px < tile.x || py < tile.y || px > tile.x + tile.fullW || py > tile.y + tile.fullH) continue;
       const mx = ((px - tile.x) / tile.fullW * tile.mask.w) | 0;
       const my = ((py - tile.y) / tile.fullH * tile.mask.h) | 0;
-      if (!tile.mask._set) {
-        const set = Object.create(null);
-        tile.mask.cells.forEach(cell => { set[`${cell[0]}|${cell[1]}`] = 1; });
-        tile.mask._set = set;
-      }
-      if (tile.mask._set[`${mx}|${my}`]) return tile;
+      if (mx < 0 || my < 0 || mx >= tile.mask.w || my >= tile.mask.h) continue;
+      const bitmap = tile.mask._bitmap || (decodeMask(tile.mask) && tile.mask._bitmap);
+      if (bitmap && bitmap[my * tile.mask.w + mx]) return tile;
     }
     return null;
   }

@@ -1,5 +1,10 @@
 <?php
 $home = get_home();
+$collage_user = get_user();
+$collage_site_name = get_sitename();
+if (session_status() === PHP_SESSION_ACTIVE) {
+  session_write_close();
+}
 $script_path = $home . '/BirdNET-Pi/scripts/bird_collage.py';
 $range_options = [
   ['label' => '1h', 'hours' => 1, 'file' => 'index-1h.json'],
@@ -23,6 +28,51 @@ foreach ($range_options as $option) {
 }
 $index_rel = 'collage/' . $active_range['file'];
 $index_path = $home . '/BirdSongs/Extracted/' . $index_rel;
+$db_path = $home . '/BirdNET-Pi/scripts/birds.db';
+$lock_path = $home . '/BirdSongs/Extracted/collage/build-' . $requested_hours . '.lock';
+$collage_index_schema = 3;
+$collage_db_refresh_grace = 45;
+
+if (!file_exists(dirname($lock_path))) {
+  mkdir(dirname($lock_path), 0775, true);
+}
+
+function collage_index_needs_data_refresh($index_path, $db_path, $script_path, $db_grace) {
+  if (!file_exists($index_path)) return true;
+  $index_mtime = filemtime($index_path);
+  if (file_exists($script_path) && filemtime($script_path) > $index_mtime) return true;
+  if (file_exists($db_path)) {
+    $db_mtime = filemtime($db_path);
+    return $db_mtime > $index_mtime && time() - $db_mtime > $db_grace;
+  }
+  return false;
+}
+
+function collage_builder_locked($lock_path) {
+  clearstatcache(true, $lock_path);
+  return file_exists($lock_path) && time() - filemtime($lock_path) < 180;
+}
+
+function run_initial_collage_index($home, $script_path, $hours, $lock_path, $builder_user, $extra_args = '') {
+  if (collage_builder_locked($lock_path)) return false;
+  $lock_handle = fopen($lock_path, 'c');
+  if (!$lock_handle || !flock($lock_handle, LOCK_EX | LOCK_NB)) {
+    if ($lock_handle) fclose($lock_handle);
+    return false;
+  }
+  touch($lock_path);
+  shell_exec('sudo -u ' . escapeshellarg($builder_user) . ' '
+    . escapeshellarg($home . '/BirdNET-Pi/birdnet/bin/python3') . ' '
+    . escapeshellarg($script_path)
+    . ' --hours ' . intval($hours)
+    . ' --limit 28 --skip-enrich'
+    . $extra_args
+    . ' > /dev/null 2>&1');
+  flock($lock_handle, LOCK_UN);
+  fclose($lock_handle);
+  @unlink($lock_path);
+  return true;
+}
 
 function collage_has_cached_missing_images($payload, $home) {
   if (empty($payload['species']) || !is_array($payload['species'])) return false;
@@ -34,15 +84,19 @@ function collage_has_cached_missing_images($payload, $home) {
   return false;
 }
 
-if (!file_exists($index_path) || time() - filemtime($index_path) > 300) {
-  shell_exec('sudo -u ' . escapeshellarg(get_user()) . ' ' . escapeshellarg($home . '/BirdNET-Pi/birdnet/bin/python3') . ' ' . escapeshellarg($script_path) . ' --hours ' . intval($requested_hours) . ' --limit 28 --generate --variant both --max-new 2 > /dev/null 2>&1 &');
+function collage_payload_schema_old($payload, $schema) {
+  return !is_array($payload) || intval($payload['index_schema'] ?? 0) !== intval($schema);
+}
+
+if (collage_index_needs_data_refresh($index_path, $db_path, $script_path, $collage_db_refresh_grace)) {
+  run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user, ' --if-stale');
 }
 
 $payload = null;
 if (file_exists($index_path)) {
   $payload = json_decode(file_get_contents($index_path), true);
-  if (collage_has_cached_missing_images($payload, $home)) {
-    shell_exec('sudo -u ' . escapeshellarg(get_user()) . ' ' . escapeshellarg($home . '/BirdNET-Pi/birdnet/bin/python3') . ' ' . escapeshellarg($script_path) . ' --hours ' . intval($requested_hours) . ' --limit 28 > /dev/null 2>&1');
+  if (collage_payload_schema_old($payload, $collage_index_schema) || collage_has_cached_missing_images($payload, $home)) {
+    run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user);
     $payload = json_decode(file_get_contents($index_path), true);
   }
 }
@@ -75,6 +129,12 @@ function collage_subtitle($hours) {
   return 'A record of birds detected by ear in the ' . collage_window_label($hours) . '.';
 }
 
+function collage_asset_url($path, $version) {
+  if (!$path) return '';
+  $sep = strpos($path, '?') === false ? '?' : '&';
+  return $path . $sep . 'v=' . rawurlencode(strval($version));
+}
+
 function collage_daily_note() {
   $notes = [
     ['Tiny beaks at dawn.', 'The yard keeps soft secrets.'],
@@ -88,16 +148,28 @@ function collage_daily_note() {
   return $notes[intval(date('z')) % count($notes)];
 }
 $daily_note = collage_daily_note();
+$bird_count = count($birds);
+$recent_birds = array_slice($birds, 0, 5);
+$initial_payload = $payload ?: ['generated_at' => null, 'species' => []];
+$json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+$initial_payload_json = json_encode($initial_payload, $json_flags);
+if ($initial_payload_json === false) {
+  $initial_payload_json = '{"generated_at":null,"species":[]}';
+}
+$index_rel_json = json_encode($index_rel, $json_flags);
+$data_url_json = json_encode('/scripts/collage_index.php?hours=' . intval($requested_hours), $json_flags);
+$silhouette_pack_path = $home . '/BirdNET-Pi/homepage/static/silhouette-pack.js';
+$silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silhouette_pack_path) : time();
 ?>
 <div class="collage-page">
   <aside class="field-guide-rail" aria-label="Observation controls and summary">
     <div class="field-guide-brand">
-      <span><?php echo htmlspecialchars(get_sitename()); ?> birds</span>
+      <span><?php echo htmlspecialchars($collage_site_name); ?> birds</span>
     </div>
     <section class="field-recent">
       <div class="field-section-head"><h3>Recently heard</h3><span><?php echo htmlspecialchars($active_range['label']); ?></span></div>
       <ol class="field-recent-list">
-        <?php foreach (array_slice($birds, 0, 5) as $bird) {
+        <?php foreach ($recent_birds as $bird) {
           $name = htmlspecialchars($bird['com_name']);
           $count = intval($bird['recent_count']);
           echo '<li><span>' . $name . '</span><b>' . $count . ' ' . ($count === 1 ? 'call' : 'calls') . '</b></li>';
@@ -123,14 +195,15 @@ $daily_note = collage_daily_note();
       <h2>Recent Visitors</h2>
       <p class="field-guide-subtitle"><?php echo htmlspecialchars(collage_subtitle($requested_hours)); ?></p>
     </header>
-    <div class="collage-empty" <?php if (count($birds) > 0) echo 'hidden'; ?>>No detections yet. The plate will fill in as BirdNET hears species.</div>
-    <div class="bird-collage <?php echo collage_count_class(count($birds)); ?>" data-layout="pending" aria-label="Recently heard birds collage" <?php if (count($birds) === 0) echo 'hidden'; ?>>
+    <div class="collage-empty" <?php if ($bird_count > 0) echo 'hidden'; ?>>No detections yet. The plate will fill in as BirdNET hears species.</div>
+    <div class="bird-collage <?php echo collage_count_class($bird_count); ?>" data-layout="pending" aria-label="Recently heard birds collage" <?php if ($bird_count === 0) echo 'hidden'; ?>>
       <?php foreach ($birds as $idx => $bird) {
           $name = htmlspecialchars($bird['com_name']);
           $sci = htmlspecialchars($bird['sci_name']);
           $count = intval($bird['recent_count']);
           if (!empty($bird['has_image'])) {
-            $src = htmlspecialchars($bird['image']);
+            $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
+            $src = htmlspecialchars(collage_asset_url($bird['image'], $version));
             echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
           } else {
             $initials = htmlspecialchars(bird_initials($bird['com_name']));
@@ -171,12 +244,12 @@ $daily_note = collage_daily_note();
     </section>
   </div>
 </div>
-<script src="static/silhouette-pack.js?v=<?php echo filemtime($home . '/BirdNET-Pi/homepage/static/silhouette-pack.js'); ?>"></script>
+<script src="static/silhouette-pack.js?v=<?php echo intval($silhouette_pack_version); ?>"></script>
 <script>
 (function() {
-  const initialIndex = <?php echo json_encode($payload ?: ['generated_at' => null, 'species' => []]); ?>;
-  const indexUrl = <?php echo json_encode($index_rel); ?>;
-  const dataUrl = <?php echo json_encode('scripts/collage_index.php?hours=' . intval($requested_hours)); ?>;
+  const initialIndex = <?php echo $initial_payload_json; ?>;
+  const indexUrl = <?php echo $index_rel_json; ?>;
+  const dataUrl = <?php echo $data_url_json; ?>;
   const collage = document.querySelector('.bird-collage');
   const empty = document.querySelector('.collage-empty');
   const recentList = document.querySelector('.field-recent-list');
@@ -191,12 +264,22 @@ $daily_note = collage_daily_note();
   const modalRecordingCount = modal.querySelector('.bird-modal-section-title span');
   const closeButton = modal.querySelector('.bird-modal-close');
   const rangeNav = document.querySelector('.collage-range');
+  const ACTIVE_POLL_MS = 10000;
+  const HIDDEN_POLL_MS = 30000;
+  const MAX_POLL_MS = 60000;
   let lastGeneratedAt = initialIndex.generated_at || '';
   let currentBirds = initialIndex.species || [];
   let lastPayloadSig = payloadSignature(initialIndex);
-  let pollDelay = 5000;
+  let pollDelay = ACTIVE_POLL_MS;
+  let pollTimer = 0;
+  let pollInFlight = false;
   let activeModalSci = '';
   let renderSeq = 0;
+  let packFrame = 0;
+  let packTimer = 0;
+  let layoutGeneration = 0;
+  let lastPackKey = '';
+  let collageNodes = null;
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
 
   function escapeHtml(value) {
@@ -242,15 +325,16 @@ $daily_note = collage_daily_note();
     };
   }
 
-  function assetUrl(path) {
+  function assetUrl(path, version) {
     if (!path) return '';
     const sep = String(path).includes('?') ? '&' : '?';
-    return `${path}${sep}v=${encodeURIComponent(lastGeneratedAt || Date.now())}`;
+    return `${path}${sep}v=${encodeURIComponent(version || lastPayloadSig || lastGeneratedAt || '')}`;
   }
 
   function payloadSignature(payload) {
+    if (payload && payload.payload_sig) return String(payload.payload_sig);
     const birds = (payload && payload.species) || [];
-    return JSON.stringify(birds.map(bird => [
+    const source = JSON.stringify(birds.map(bird => [
       bird.sci_name || '',
       bird.com_name || '',
       Number(bird.recent_count || 0),
@@ -261,8 +345,11 @@ $daily_note = collage_daily_note();
       bird.image || '',
       bird.detail_image || '',
       bird.has_image ? 1 : 0,
-      bird.has_detail_image ? 1 : 0
+      bird.has_detail_image ? 1 : 0,
+      bird.image_version || '',
+      bird.detail_image_version || ''
     ]));
+    return String(hashString(source));
   }
 
   function birdMarkup(bird, idx) {
@@ -270,7 +357,7 @@ $daily_note = collage_daily_note();
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
     if (bird.has_image) {
-      const src = escapeHtml(assetUrl(bird.image));
+      const src = escapeHtml(assetUrl(bird.image, bird.image_version));
       return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
     }
     return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
@@ -284,14 +371,83 @@ $daily_note = collage_daily_note();
     }).join('');
   }
 
+  function parseBirdTimestamp(value) {
+    if (!value || value === 'manual seed') return null;
+    const text = String(value).trim();
+    const match = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (match) {
+      return new Date(
+        Number(match[1]),
+        Number(match[2]) - 1,
+        Number(match[3]),
+        Number(match[4] || 0),
+        Number(match[5] || 0),
+        Number(match[6] || 0)
+      );
+    }
+    const parsed = new Date(text);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  function localDay(date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  }
+
   function relativeDate(value) {
     if (!value || value === 'manual seed') return value || 'unknown';
-    const parsed = new Date(value.replace(' ', 'T'));
-    if (Number.isNaN(parsed.getTime())) return value;
-    const days = Math.max(0, Math.floor((Date.now() - parsed.getTime()) / 86400000));
-    if (days === 0) return 'today';
-    if (days === 1) return '1d ago';
+    const parsed = parseBirdTimestamp(value);
+    if (!parsed) return value;
+    const days = Math.round((localDay(new Date()).getTime() - localDay(parsed).getTime()) / 86400000);
+    if (days <= 0) return 'today';
+    if (days === 1) return 'yesterday';
     return `${days}d ago`;
+  }
+
+  function absoluteDate(value) {
+    const parsed = parseBirdTimestamp(value);
+    if (!parsed) return value || '';
+    return parsed.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  }
+
+  function relativeDateHtml(value) {
+    return `<b class="js-relative-date" data-date-value="${escapeHtml(value || '')}" title="${escapeHtml(absoluteDate(value))}">${escapeHtml(relativeDate(value))}</b>`;
+  }
+
+  function earliestTimestamp(values) {
+    let bestValue = '';
+    let bestTime = Infinity;
+    values.forEach(function(value) {
+      if (!value || value === 'manual seed') return;
+      const parsed = parseBirdTimestamp(value);
+      if (!parsed) return;
+      const time = parsed.getTime();
+      if (time < bestTime) {
+        bestTime = time;
+        bestValue = value;
+      }
+    });
+    return bestValue;
+  }
+
+  function firstHeardValue(bird) {
+    const values = [bird && bird.first_heard];
+    ((bird && bird.recordings) || []).forEach(function(recording) {
+      if (recording.date) values.push(`${recording.date} ${recording.time || '00:00:00'}`);
+    });
+    return earliestTimestamp(values) || (bird && bird.last_heard) || '';
+  }
+
+  function refreshRelativeDates() {
+    document.querySelectorAll('.js-relative-date').forEach(function(node) {
+      node.textContent = relativeDate(node.dataset.dateValue || '');
+      node.title = absoluteDate(node.dataset.dateValue || '');
+    });
   }
 
   function recordingMarkup(recording) {
@@ -302,7 +458,7 @@ $daily_note = collage_daily_note();
     return `<div class="bird-modal-recording">
       <button class="bird-modal-play" type="button" data-audio="${escapeHtml(audioPath)}" aria-label="Play recording">&#9654;</button>
       <div class="bird-modal-rec-main">
-        <div><b>${escapeHtml(relativeDate(`${recording.date} ${recording.time}`))}</b><span>${escapeHtml(recording.date)} &middot; ${escapeHtml(recording.time)}</span></div>
+        <div>${relativeDateHtml(`${recording.date} ${recording.time}`)}<span>${escapeHtml(recording.date)} &middot; ${escapeHtml(recording.time)}</span></div>
         <canvas class="bird-modal-viz" width="320" height="34" data-audio="${escapeHtml(audioPath)}" aria-hidden="true"></canvas>
       </div>
       <strong>${confidence}%</strong>
@@ -324,18 +480,19 @@ $daily_note = collage_daily_note();
     const name = escapeHtml(bird.com_name);
     const sci = escapeHtml(bird.sci_name);
     const modalImage = bird.has_detail_image ? bird.detail_image : bird.image;
+    const modalImageVersion = bird.has_detail_image ? bird.detail_image_version : bird.image_version;
     const modalRegen = `<button class="regen-image-btn modal-regen" type="button" data-bird-idx="${idx}" data-variant="both" aria-label="Regenerate bird images">${refreshIcon}</button>`;
     modalArt.innerHTML = (bird.has_detail_image || bird.has_image)
-      ? `<img src="${escapeHtml(assetUrl(modalImage))}" alt="${name}">${modalRegen}`
+      ? `<img src="${escapeHtml(assetUrl(modalImage, modalImageVersion))}" alt="${name}">${modalRegen}`
       : `<div class="bird-modal-placeholder">${escapeHtml(initials(bird.com_name))}</div>${modalRegen}`;
     modalTitle.textContent = bird.com_name || 'Unknown bird';
     modalSci.textContent = bird.sci_name || '';
     modalStats.innerHTML = `
       <div><b>${Number(bird.total_count || bird.recent_count || 0)}</b><span>all time</span></div>
       <div><b>${Number(bird.today_count || 0)}</b><span>today</span></div>
-      <div><b>${escapeHtml(relativeDate(bird.first_heard || bird.last_heard))}</b><span>first heard</span></div>`;
+      <div>${relativeDateHtml(firstHeardValue(bird))}<span>first heard</span></div>`;
     modalDescription.textContent = bird.description || fallbackDescription(bird);
-    modalMeta.innerHTML = `<dt>Genus</dt><dd>${escapeHtml(bird.genus || '')}</dd><dt>Rarity</dt><dd>${escapeHtml(bird.rarity || 'new')}</dd><dt>Last heard</dt><dd>${escapeHtml(relativeDate(bird.last_heard))}</dd>`;
+    modalMeta.innerHTML = `<dt>Genus</dt><dd>${escapeHtml(bird.genus || '')}</dd><dt>Rarity</dt><dd>${escapeHtml(bird.rarity || 'new')}</dd><dt>Last heard</dt><dd>${relativeDateHtml(bird.last_heard)}</dd>`;
     const recordings = bird.recordings || [];
     modalRecordingCount.textContent = `${recordings.length || Number(bird.total_count || 0)} captured`;
     modalList.innerHTML = recordings.length
@@ -360,6 +517,7 @@ $daily_note = collage_daily_note();
   let modalVizFrame = 0;
   const PLAYHEAD_VISUAL_LAG_SEC = 0.2;
   const waveformCache = new Map();
+  const waveformPending = new Map();
 
   function resetRecordingRow(button) {
     if (!button) return;
@@ -493,6 +651,11 @@ $daily_note = collage_daily_note();
       drawWaveformCanvas(canvas, 0);
       return Promise.resolve();
     }
+    if (waveformPending.has(url)) {
+      return waveformPending.get(url).then(function() {
+        drawWaveformCanvas(canvas, 0);
+      });
+    }
     baseViz(canvas, 'loading');
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) {
@@ -503,7 +666,7 @@ $daily_note = collage_daily_note();
     if (modalAudioCtx.state === 'suspended') {
       modalAudioCtx.resume().catch(function() {});
     }
-    return fetch(url, {cache: 'force-cache'})
+    const pending = fetch(url, {cache: 'force-cache'})
       .then(function(response) {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.arrayBuffer();
@@ -517,11 +680,16 @@ $daily_note = collage_daily_note();
         console.warn('waveform render failed', error);
         baseViz(canvas, 'preview unavailable');
       });
+    waveformPending.set(url, pending);
+    return pending.finally(function() {
+      waveformPending.delete(url);
+    });
   }
 
   function initRecordingWaveforms() {
     modalList.querySelectorAll('.bird-modal-viz').forEach(function(canvas) {
-      ensureWaveform(canvas);
+      if (waveformCache.has(canvas.dataset.audio || '')) drawWaveformCanvas(canvas, 0);
+      else baseViz(canvas, 'tap play');
     });
   }
 
@@ -583,10 +751,6 @@ $daily_note = collage_daily_note();
       button.innerHTML = '!';
       window.setTimeout(function() { resetRecordingRow(button); }, 1400);
     });
-    modalAudio.addEventListener('timeupdate', function() {
-      if (!canvas) return;
-      drawWaveformCanvas(canvas, playheadProgress());
-    });
 
     Promise.resolve(canvas ? ensureWaveform(canvas) : null)
       .then(function() { return modalAudio.play(); })
@@ -605,13 +769,14 @@ $daily_note = collage_daily_note();
     collage.className = `bird-collage ${countClass(birds.length)}`;
     collage.dataset.layout = 'pending';
     collage.innerHTML = birds.map(birdMarkup).join('');
+    collageNodes = null;
+    layoutGeneration++;
+    lastPackKey = '';
     if (recentList) recentList.innerHTML = recentListMarkup(birds);
-    collage.querySelectorAll('img').forEach(img => {
-      if (!img.complete) img.addEventListener('load', packBirds, {once: true});
-    });
     collage.hidden = birds.length === 0;
     empty.hidden = birds.length > 0;
-    requestAnimationFrame(packBirds);
+    schedulePack();
+    refreshRelativeDates();
     if (!modal.hidden && activeModalSci) {
       const modalIdx = currentBirds.findIndex(bird => bird.sci_name === activeModalSci);
       if (modalIdx >= 0) openModal(modalIdx);
@@ -628,18 +793,61 @@ $daily_note = collage_daily_note();
     }, fadeDelay);
   }
 
+  function basePollDelay() {
+    return document.hidden ? HIDDEN_POLL_MS : ACTIVE_POLL_MS;
+  }
+
+  function schedulePoll(delay) {
+    window.clearTimeout(pollTimer);
+    pollTimer = window.setTimeout(poll, delay);
+  }
+
   let collagePlaced = [];
   let collageHovered = null;
+  let hoverFrame = 0;
+  let hoverX = 0;
+  let hoverY = 0;
+
+  function schedulePack(delay) {
+    if (delay) {
+      window.clearTimeout(packTimer);
+      packTimer = window.setTimeout(function() {
+        packTimer = 0;
+        schedulePack();
+      }, delay);
+      return;
+    }
+    if (packTimer) {
+      window.clearTimeout(packTimer);
+      packTimer = 0;
+    }
+    if (packFrame) return;
+    packFrame = requestAnimationFrame(function() {
+      packFrame = 0;
+      packBirds();
+    });
+  }
 
   function packBirds() {
     if (collage.hidden || currentBirds.length === 0 || !window.SilhouettePack) return;
-    const nodes = Array.from(collage.querySelectorAll('.collage-bird'));
+    const nodes = collageNodes || (collageNodes = Array.from(collage.querySelectorAll('.collage-bird')));
     if (nodes.length === 0) return;
 
     const rect = collage.getBoundingClientRect();
     const width = rect.width;
     const height = rect.height;
     if (width < 100 || height < 100) return;
+    const packKey = [
+      layoutGeneration,
+      lastPayloadSig,
+      nodes.length,
+      Math.round(width),
+      Math.round(height)
+    ].join('|');
+    if (packKey === lastPackKey) {
+      collage.dataset.layout = 'ready';
+      return;
+    }
 
     const placed = window.SilhouettePack.layoutNodes({
       nodes,
@@ -649,6 +857,7 @@ $daily_note = collage_daily_note();
     });
     window.SilhouettePack.applyLayout(placed);
     collagePlaced = placed.filter(tile => tile.x > -1000);
+    lastPackKey = packKey;
     requestAnimationFrame(function() {
       collage.dataset.layout = 'ready';
     });
@@ -679,7 +888,7 @@ $daily_note = collage_daily_note();
       button.setAttribute('data-loading', 'true');
     }
     try {
-      const response = await fetch('scripts/collage_regen.php', {
+      const response = await fetch('/scripts/collage_regen.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: body.toString(),
@@ -701,16 +910,30 @@ $daily_note = collage_daily_note();
     }
   }
 
-  collage.addEventListener('mousemove', function(event) {
-    const hit = maskHitTest(event.clientX, event.clientY);
+  function updateCollageHover(clientX, clientY) {
+    const hit = maskHitTest(clientX, clientY);
     if (hit === collageHovered) return;
     if (collageHovered && collageHovered.node) collageHovered.node.classList.remove('is-hover');
     collageHovered = hit;
     if (hit && hit.node) hit.node.classList.add('is-hover');
     collage.style.cursor = hit ? 'pointer' : 'default';
+  }
+
+  collage.addEventListener('mousemove', function(event) {
+    hoverX = event.clientX;
+    hoverY = event.clientY;
+    if (hoverFrame) return;
+    hoverFrame = requestAnimationFrame(function() {
+      hoverFrame = 0;
+      updateCollageHover(hoverX, hoverY);
+    });
   });
 
   collage.addEventListener('mouseleave', function() {
+    if (hoverFrame) {
+      cancelAnimationFrame(hoverFrame);
+      hoverFrame = 0;
+    }
     if (collageHovered && collageHovered.node) collageHovered.node.classList.remove('is-hover');
     collageHovered = null;
     collage.style.cursor = 'default';
@@ -760,11 +983,10 @@ $daily_note = collage_daily_note();
     if (event.key === 'Escape' && !modal.hidden) closeModal();
   });
   window.addEventListener('resize', function() {
-    window.clearTimeout(window.__collagePackTimer);
-    window.__collagePackTimer = window.setTimeout(packBirds, 100);
+    schedulePack(100);
   });
-  window.addEventListener('load', packBirds);
-  requestAnimationFrame(packBirds);
+  window.addEventListener('load', function() { schedulePack(); });
+  schedulePack();
 
   if (rangeNav) {
     rangeNav.addEventListener('click', function(event) {
@@ -779,8 +1001,19 @@ $daily_note = collage_daily_note();
   }
 
   async function poll() {
+    if (pollInFlight) {
+      schedulePoll(pollDelay);
+      return;
+    }
+    pollInFlight = true;
     try {
-      const response = await fetch(`${dataUrl}&ts=${Date.now()}`, {cache: 'no-store'});
+      const sig = lastPayloadSig ? `&sig=${encodeURIComponent(lastPayloadSig)}` : '';
+      const response = await fetch(`${dataUrl}&ts=${Date.now()}${sig}`, {cache: 'no-store'});
+      if (response.status === 204) {
+        pollDelay = basePollDelay();
+        refreshRelativeDates();
+        return;
+      }
       if (response.ok) {
         const payload = await response.json();
         const nextSig = payloadSignature(payload);
@@ -788,16 +1021,28 @@ $daily_note = collage_daily_note();
           render(payload);
         } else {
           lastGeneratedAt = payload.generated_at || lastGeneratedAt;
+          refreshRelativeDates();
         }
-        pollDelay = 5000;
+        pollDelay = basePollDelay();
       }
     } catch (error) {
-      pollDelay = Math.min(pollDelay + 5000, 30000);
+      pollDelay = Math.min(pollDelay + ACTIVE_POLL_MS, MAX_POLL_MS);
     } finally {
-      window.setTimeout(poll, pollDelay);
+      pollInFlight = false;
+      schedulePoll(pollDelay);
     }
   }
 
-  window.setTimeout(poll, pollDelay);
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+      pollDelay = ACTIVE_POLL_MS;
+      refreshRelativeDates();
+      schedulePoll(0);
+    }
+  });
+
+  window.setInterval(refreshRelativeDates, 60000);
+  refreshRelativeDates();
+  schedulePoll(pollDelay);
 })();
 </script>

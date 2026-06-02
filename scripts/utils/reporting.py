@@ -6,17 +6,17 @@ import sqlite3
 import subprocess
 import tempfile
 import io
-import soundfile
 from time import sleep
-
-import requests
-from PIL import Image, ImageDraw, ImageFont
 
 from .helpers import get_settings, get_font, DB_PATH
 from .classes import Detection, ParseFileName
-from .notifications import sendAppriseNotifications
 
 log = logging.getLogger(__name__)
+DB_INSERT_SQL = "INSERT INTO detections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+APPRISE_CONFIG = os.path.expanduser('~/BirdNET-Pi/apprise.txt')
+_LAST_JSON_BY_STREAM = {}
+_JSON_CLEANUP_COUNTER = {}
+_JSON_FULL_SCAN_INTERVAL = 240
 
 
 def extract(in_file, out_file, start, stop):
@@ -47,6 +47,8 @@ def extract_safe(in_file, out_file, start, stop):
 
 
 def spectrogram(in_file, title, comment, raw=0):
+    from PIL import Image, ImageDraw, ImageFont
+
     fd, tmp_file = tempfile.mkstemp(suffix='.png')
     os.close(fd)
     args = ['sox', '-V1', f'{in_file}', '-n', 'remix', '1', 'rate', '24k', 'spectrogram',
@@ -73,8 +75,8 @@ def spectrogram(in_file, title, comment, raw=0):
     os.remove(tmp_file)
 
 
-def extract_detection(file: ParseFileName, detection: Detection):
-    conf = get_settings()
+def extract_detection(file: ParseFileName, detection: Detection, conf=None):
+    conf = get_settings() if conf is None else conf
     new_file_name = f'{detection.common_name_safe}-{detection.confidence_pct}-{detection.date}-birdnet-{file.RTSP_id}{detection.time}.{conf["AUDIOFMT"]}'
     new_dir = os.path.join(conf['EXTRACTED'], 'By_Date', f'{detection.date}', f'{detection.common_name_safe}')
     new_file = os.path.join(new_dir, new_file_name)
@@ -87,33 +89,47 @@ def extract_detection(file: ParseFileName, detection: Detection):
     return new_file
 
 
-def write_to_db(file: ParseFileName, detection: Detection):
-    conf = get_settings()
-    # Connect to SQLite Database
-    for attempt_number in range(3):
-        try:
-            con = sqlite3.connect(DB_PATH)
-            cur = con.cursor()
-            cur.execute("INSERT INTO detections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (detection.date, detection.time, detection.scientific_name, detection.common_name, detection.confidence,
-                         conf['LATITUDE'], conf['LONGITUDE'], conf['CONFIDENCE'], str(detection.week), conf['SENSITIVITY'],
-                         conf['OVERLAP'], os.path.basename(detection.file_name_extr)))
-            # (Date, Time, Sci_Name, Com_Name, str(score),
-            # Lat, Lon, Cutoff, Week, Sens,
-            # Overlap, File_Name))
+def write_to_db(file: ParseFileName, detection: Detection, connection=None, conf=None):
+    write_detections_to_db(file, [detection], connection=connection, conf=conf)
 
-            con.commit()
+
+def write_detections_to_db(file: ParseFileName, detections: [Detection], connection=None, cursor=None, conf=None):
+    if not detections:
+        return
+    conf = get_settings() if conf is None else conf
+    rows = [
+        (detection.date, detection.time, detection.scientific_name, detection.common_name, detection.confidence,
+         conf['LATITUDE'], conf['LONGITUDE'], conf['CONFIDENCE'], str(detection.week), conf['SENSITIVITY'],
+         conf['OVERLAP'], os.path.basename(detection.file_name_extr))
+        for detection in detections
+    ]
+
+    local_connection = connection is None
+    local_cursor = cursor is None
+    con = connection if connection is not None else sqlite3.connect(DB_PATH)
+    db_cursor = cursor if cursor is not None else con.cursor()
+    try:
+        for attempt_number in range(3):
+            try:
+                db_cursor.executemany(DB_INSERT_SQL, rows)
+                con.commit()
+                break
+            except BaseException as e:
+                if not local_connection:
+                    raise
+                log.warning("Database busy: %s", e)
+                sleep(2)
+    finally:
+        if local_cursor:
+            db_cursor.close()
+        if local_connection:
             con.close()
-            break
-        except BaseException as e:
-            log.warning("Database busy: %s", e)
-            sleep(2)
 
 
-def summary(file: ParseFileName, detection: Detection):
+def summary(file: ParseFileName, detection: Detection, conf=None):
+    conf = get_settings() if conf is None else conf
     # Date;Time;Sci_Name;Com_Name;Confidence;Lat;Lon;Cutoff;Week;Sens;Overlap
     # 2023-03-03;12:48:01;Phleocryptes melanops;Wren-like Rushbird;0.76950216;-1;-1;0.7;9;1.25;0.0
-    conf = get_settings()
     s = (f'{detection.date};{detection.time};{detection.scientific_name};{detection.common_name};'
          f'{detection.confidence};'
          f'{conf["LATITUDE"]};{conf["LONGITUDE"]};{conf["CONFIDENCE"]};{detection.week};{conf["SENSITIVITY"]};'
@@ -121,25 +137,54 @@ def summary(file: ParseFileName, detection: Detection):
     return s
 
 
-def write_to_file(file: ParseFileName, detection: Detection):
+def write_to_file(file: ParseFileName, detection: Detection, conf=None):
+    write_detections_to_file(file, [detection], conf=conf)
+
+
+def write_detections_to_file(file: ParseFileName, detections: [Detection], conf=None):
+    if not detections:
+        return
+    conf = get_settings() if conf is None else conf
     with open(os.path.expanduser('~/BirdNET-Pi/BirdDB.txt'), 'a') as rfile:
-        rfile.write(f'{summary(file, detection)}\n')
+        rfile.writelines(f'{summary(file, detection)}\n' for detection in detections)
 
 
-def update_json_file(file: ParseFileName, detections: [Detection]):
+def update_json_file(file: ParseFileName, detections: [Detection], conf=None):
+    json_file = f'{file.file_name}.json'
+    conf = get_settings() if conf is None else conf
+    cleanup_prior_json_files(file, json_file)
+    write_to_json_file(file, detections, json_file, conf=conf)
+
+
+def cleanup_prior_json_files(file: ParseFileName, current_json):
+    stream_key = (os.path.dirname(file.file_name), file.RTSP_id or '')
+    cleanup_count = _JSON_CLEANUP_COUNTER.get(stream_key, 0) + 1
+    _JSON_CLEANUP_COUNTER[stream_key] = cleanup_count
+    previous_json = _LAST_JSON_BY_STREAM.get(stream_key)
+    _LAST_JSON_BY_STREAM[stream_key] = current_json
+
+    if previous_json and previous_json != current_json and cleanup_count % _JSON_FULL_SCAN_INTERVAL != 0:
+        try:
+            os.remove(previous_json)
+        except FileNotFoundError:
+            pass
+        return
+
     if file.RTSP_id is None:
         mask = f'{os.path.dirname(file.file_name)}/*.json'
     else:
         mask = f'{os.path.dirname(file.file_name)}/*{file.RTSP_id}*.json'
     for f in glob.glob(mask):
+        if f == current_json:
+            continue
         log.debug(f'deleting {f}')
         os.remove(f)
-    write_to_json_file(file, detections)
 
 
-def write_to_json_file(file: ParseFileName, detections: [Detection]):
-    conf = get_settings()
-    json_file = f'{file.file_name}.json'
+def write_to_json_file(file: ParseFileName, detections: [Detection], json_file=None, conf=None):
+    conf = get_settings() if conf is None else conf
+    if json_file is None:
+        json_file = f'{file.file_name}.json'
     log.debug(f'WRITING RESULTS TO {json_file}')
     dets = {'file_name': os.path.basename(json_file), 'timestamp': file.iso8601, 'delay': conf['RECORDING_LENGTH'],
             'detections': [{"start": det.start, "common_name": det.common_name, "confidence": det.confidence} for det in
@@ -149,9 +194,15 @@ def write_to_json_file(file: ParseFileName, detections: [Detection]):
     log.debug(f'DONE! WROTE {len(detections)} RESULTS.')
 
 
-def apprise(file: ParseFileName, detections: [Detection]):
+def apprise(file: ParseFileName, detections: [Detection], conf=None):
+    if not detections:
+        return
+    if not (os.path.exists(APPRISE_CONFIG) and os.path.getsize(APPRISE_CONFIG) > 0):
+        return
+    from .notifications import sendAppriseNotifications
+
     species_apprised_this_run = []
-    conf = get_settings()
+    conf = get_settings() if conf is None else conf
 
     for detection in detections:
         # Apprise of detection if not already alerted this run.
@@ -167,11 +218,14 @@ def apprise(file: ParseFileName, detections: [Detection]):
             species_apprised_this_run.append(detection.species)
 
 
-def bird_weather(file: ParseFileName, detections: [Detection]):
-    conf = get_settings()
+def bird_weather(file: ParseFileName, detections: [Detection], conf=None):
+    conf = get_settings() if conf is None else conf
     if conf['BIRDWEATHER_ID'] == "":
         return
     if detections:
+        import requests
+        import soundfile
+
         try:
             data, samplerate = soundfile.read(file.file_name)
             buf = io.BytesIO()
@@ -217,9 +271,11 @@ def bird_weather(file: ParseFileName, detections: [Detection]):
                 log.error("Cannot POST detection: %s", e)
 
 
-def heartbeat():
-    conf = get_settings()
+def heartbeat(conf=None):
+    conf = get_settings() if conf is None else conf
     if conf['HEARTBEAT_URL']:
+        import requests
+
         try:
             result = requests.get(url=conf['HEARTBEAT_URL'], timeout=10)
             log.info('Heartbeat: %s', result.text)

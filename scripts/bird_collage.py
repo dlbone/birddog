@@ -12,9 +12,6 @@ import time
 import urllib.error
 import urllib.request
 import urllib.parse
-import numpy as np
-from scipy import ndimage
-from PIL import Image
 
 
 HOME = os.path.expanduser("~")
@@ -39,6 +36,20 @@ DEFAULT_STYLE = (
 DEFAULT_MODEL = "gemini-2.5-flash-image"
 TODAY_HOURS = -1
 RANGE_HOURS = (1, 12, TODAY_HOURS, 24, 168, 1000000)
+INDEX_SCHEMA_VERSION = 3
+_IMAGE_LIBS = None
+_LABELS_CACHE = None
+_META_CACHE = None
+
+
+def image_libs():
+    global _IMAGE_LIBS
+    if _IMAGE_LIBS is None:
+        import numpy as np
+        from scipy import ndimage
+        from PIL import Image
+        _IMAGE_LIBS = (np, ndimage, Image)
+    return _IMAGE_LIBS
 
 
 def slugify(value):
@@ -64,11 +75,33 @@ def read_json(path, default):
 
 
 def load_labels():
+    global _LABELS_CACHE
+    if _LABELS_CACHE is not None:
+        return _LABELS_CACHE
     try:
         with open(LABELS_PATH, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+            _LABELS_CACHE = json.load(handle)
     except FileNotFoundError:
-        return {}
+        _LABELS_CACHE = {}
+    return _LABELS_CACHE
+
+
+def load_meta_cache():
+    global _META_CACHE
+    if _META_CACHE is None:
+        _META_CACHE = read_json(META_PATH, {})
+    return _META_CACHE
+
+
+def ensure_detection_indexes(conn):
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS detections_Date_Time "
+        "ON detections (Date, Time)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS detections_Sci_Name_Date_Time "
+        "ON detections (Sci_Name, Date, Time)"
+    )
 
 
 def api_key():
@@ -93,55 +126,116 @@ def image_path_for(sci_name, com_name, variant="collage"):
     return os.path.join(IMAGE_DIR, f"{slugify(com_name)}{suffix}-{digest}.png")
 
 
-def get_species(hours, limit):
-    labels = load_labels()
+def open_db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    conn.execute("PRAGMA cache_size=-2000")
+    ensure_detection_indexes(conn)
+    return conn
+
+
+def get_species(hours, limit, conn=None, labels=None, recordings_cache=None):
+    labels = labels if labels is not None else load_labels()
+    close_conn = conn is None
+    if close_conn:
+        conn = open_db()
+    else:
+        ensure_detection_indexes(conn)
     today_only = hours == TODAY_HOURS
     all_time = (hours <= 0 and hours != TODAY_HOURS) or hours >= 1000000
-    cutoff = (dt.datetime.now() - dt.timedelta(hours=max(1, hours))).strftime("%Y-%m-%d %H:%M:%S")
-    recent_sql = """
-        SELECT
-          d.Sci_Name,
-          COALESCE(NULLIF(d.Com_Name, ''), d.Sci_Name) AS Com_Name,
-          COUNT(*) AS RecentCount,
-          MAX(d.Date || ' ' || d.Time) AS LastHeard,
-          MIN(d.Date || ' ' || d.Time) AS FirstHeard,
-          SUM(CASE WHEN d.Date = DATE('now', 'localtime') THEN 1 ELSE 0 END) AS TodayCount,
-          (
-            SELECT COUNT(*) FROM detections all_d
-            WHERE all_d.Sci_Name = d.Sci_Name
-          ) AS TotalCount
-        FROM detections d
-        WHERE (
-          ? = 1
-          OR (? = 1 AND d.Date = DATE('now', 'localtime'))
-          OR (? = 0 AND datetime(d.Date || ' ' || d.Time) >= datetime(?))
-        )
-        GROUP BY d.Sci_Name
-        ORDER BY datetime(LastHeard) DESC
-        LIMIT ?
-    """
-    rows = conn.execute(
-        recent_sql,
-        (1 if all_time else 0, 1 if today_only else 0, 1 if today_only else 0, cutoff, limit),
-    ).fetchall()
-    if not rows and not today_only:
-        fallback_sql = """
+    cutoff = dt.datetime.now() - dt.timedelta(hours=max(1, hours))
+    cutoff_date = cutoff.strftime("%Y-%m-%d")
+    cutoff_time = cutoff.strftime("%H:%M:%S")
+    def fetch_rows(use_all_time):
+        if use_all_time:
+            index_hint = "INDEXED BY detections_Sci_Name_Date_Time"
+            where_sql = ""
+            params = []
+        elif today_only:
+            index_hint = "INDEXED BY detections_Date_Time"
+            where_sql = "WHERE d.Date = DATE('now', 'localtime')"
+            params = []
+        else:
+            index_hint = "INDEXED BY detections_Date_Time"
+            where_sql = "WHERE (d.Date > ? OR (d.Date = ? AND d.Time >= ?))"
+            params = [cutoff_date, cutoff_date, cutoff_time]
+        recent_sql = f"""
+            WITH recent AS (
+              SELECT
+                d.Sci_Name,
+                COALESCE(NULLIF(MAX(d.Com_Name), ''), d.Sci_Name) AS Com_Name,
+                COUNT(*) AS RecentCount,
+                MAX(d.Date || ' ' || d.Time) AS LastHeard
+              FROM detections d {index_hint}
+              {where_sql}
+              GROUP BY d.Sci_Name
+              ORDER BY LastHeard DESC
+              LIMIT ?
+            )
             SELECT
-              d.Sci_Name,
-              COALESCE(NULLIF(d.Com_Name, ''), d.Sci_Name) AS Com_Name,
-              COUNT(*) AS RecentCount,
-              MAX(d.Date || ' ' || d.Time) AS LastHeard,
-              MIN(d.Date || ' ' || d.Time) AS FirstHeard,
-              SUM(CASE WHEN d.Date = DATE('now', 'localtime') THEN 1 ELSE 0 END) AS TodayCount,
+              r.Sci_Name,
+              r.Com_Name,
+              r.RecentCount,
+              r.LastHeard,
+              MIN(a.Date || ' ' || a.Time) AS FirstHeard,
+              SUM(CASE WHEN a.Date = DATE('now', 'localtime') THEN 1 ELSE 0 END) AS TodayCount,
               COUNT(*) AS TotalCount
-            FROM detections d
-            GROUP BY d.Sci_Name
-            ORDER BY datetime(LastHeard) DESC
-            LIMIT ?
+            FROM recent r
+            JOIN detections a INDEXED BY detections_Sci_Name_Date_Time
+              ON a.Sci_Name = r.Sci_Name
+            GROUP BY r.Sci_Name, r.Com_Name, r.RecentCount, r.LastHeard
+            ORDER BY r.LastHeard DESC
         """
-        rows = conn.execute(fallback_sql, (limit,)).fetchall()
+        return conn.execute(recent_sql, tuple(params + [limit])).fetchall()
+
+    def fetch_recordings_by_species(sci_names, per_species_limit):
+        if not sci_names:
+            return {}
+        # Single-query batched fetch avoids N+1 SELECTs for each bird, and
+        # ROW_NUMBER keeps SQLite from returning years of old rows when we
+        # only need a few recordings for the modal.
+        placeholders = ",".join(["?"] * len(sci_names))
+        rows = conn.execute(
+            f"""
+            WITH ranked AS (
+              SELECT
+                Sci_Name,
+                Date,
+                Time,
+                File_Name,
+                Confidence,
+                ROW_NUMBER() OVER (
+                  PARTITION BY Sci_Name
+                  ORDER BY Date DESC, Time DESC
+                ) AS rn
+              FROM detections INDEXED BY detections_Sci_Name_Date_Time
+              WHERE Sci_Name IN ({placeholders})
+            )
+            SELECT Sci_Name, Date, Time, File_Name, Confidence
+            FROM ranked
+            WHERE rn <= ?
+            ORDER BY Sci_Name, Date DESC, Time DESC
+            """,
+            tuple(sci_names) + (per_species_limit,),
+        ).fetchall()
+        grouped = {sci_name: [] for sci_name in sci_names}
+        for row in rows:
+            bucket = grouped.get(row["Sci_Name"])
+            if bucket is not None:
+                bucket.append({
+                    "date": row["Date"],
+                    "time": row["Time"],
+                    "file_name": row["File_Name"],
+                    "confidence": row["Confidence"],
+                })
+        return grouped
+
+    rows = fetch_rows(all_time)
+    sci_names = [row["Sci_Name"] for row in rows]
+    all_recordings = fetch_recordings_by_species(sci_names, 6) if rows else {}
     species = []
     for row in rows:
         sci_name = row["Sci_Name"]
@@ -150,16 +244,13 @@ def get_species(hours, limit):
         detail_image_path = image_path_for(sci_name, com_name, "detail")
         rel_image = os.path.relpath(image_path, os.path.join(HOME, "BirdSongs", "Extracted"))
         rel_detail_image = os.path.relpath(detail_image_path, os.path.join(HOME, "BirdSongs", "Extracted"))
-        recordings = conn.execute(
-            """
-            SELECT Date, Time, File_Name, Confidence
-            FROM detections
-            WHERE Sci_Name = ?
-            ORDER BY Date DESC, Time DESC
-            LIMIT 6
-            """,
-            (sci_name,),
-        ).fetchall()
+        cache_key = (hours, sci_name)
+        if recordings_cache is not None and cache_key in recordings_cache:
+            recordings = recordings_cache[cache_key]
+        else:
+            recordings = all_recordings.get(sci_name, [])
+            if recordings_cache is not None:
+                recordings_cache[cache_key] = recordings
         species.append({
             "sci_name": sci_name,
             "com_name": com_name,
@@ -175,15 +266,16 @@ def get_species(hours, limit):
             "slug": slugify(f"{com_name}-{sci_name}"),
             "recordings": [
                 {
-                    "date": rec["Date"],
-                    "time": rec["Time"],
-                    "file_name": rec["File_Name"],
-                    "confidence": rec["Confidence"],
+                    "date": rec["date"],
+                    "time": rec["time"],
+                    "file_name": rec["file_name"],
+                    "confidence": rec["confidence"],
                 }
                 for rec in recordings
             ],
         })
-    conn.close()
+    if close_conn:
+        conn.close()
     return species
 
 
@@ -219,13 +311,22 @@ def fetch_wikipedia_summary(sci_name, com_name):
 
 def enrich_metadata(species, fetch_missing=True):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    cache = read_json(META_PATH, {})
+    cache = load_meta_cache()
     changed = False
     today = dt.date.today().isoformat()
+    retry_before = (dt.date.today() - dt.timedelta(days=7)).isoformat()
     for bird in species:
         sci_name = bird.get("sci_name", "")
         cached = cache.get(sci_name, {})
-        if fetch_missing and not cached.get("description"):
+        checked_at = cached.get("date_created", "")
+        should_fetch = (
+            fetch_missing
+            and (
+                "description" not in cached
+                or (not cached.get("description") and checked_at < retry_before)
+            )
+        )
+        if should_fetch:
             cached = fetch_wikipedia_summary(sci_name, bird.get("com_name", ""))
             cached["date_created"] = today
             changed = True
@@ -273,6 +374,7 @@ def prompt_for(com_name, sci_name, variant="collage"):
 
 
 def transparent_image(path):
+    np, ndimage, Image = image_libs()
     image = Image.open(path).convert("RGBA")
     data = np.array(image)
     rgb = data[:, :, :3].astype(np.int16)
@@ -319,6 +421,7 @@ def atomic_make_background_transparent(path):
 
 
 def bitpack_mask(mask):
+    np, _, _ = image_libs()
     flat = mask.astype(np.uint8).reshape(-1)
     out = bytearray((len(flat) + 7) // 8)
     for idx, value in enumerate(flat):
@@ -328,6 +431,7 @@ def bitpack_mask(mask):
 
 
 def image_mask_metadata(path, max_dim=88):
+    np, ndimage, Image = image_libs()
     image = Image.open(path).convert("RGBA")
     width, height = image.size
     alpha = np.array(image.getchannel("A"))
@@ -456,30 +560,58 @@ def index_path_for_hours(hours):
     return os.path.join(OUTPUT_DIR, f"index-{int(hours)}h.json")
 
 
+def payload_signature(species):
+    source = json.dumps(species, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha1(source.encode("utf-8")).hexdigest()
+
+
 def write_index(species, hours):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
     payload = {
+        "index_schema": INDEX_SCHEMA_VERSION,
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "hours": hours,
         "species_count": len(species),
+        "payload_sig": payload_signature(species),
         "species": species,
     }
     index_path = index_path_for_hours(hours)
     tmp_path = f"{index_path}.tmp"
     with open(tmp_path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2)
+        json.dump(payload, handle, separators=(",", ":"))
         handle.write("\n")
     os.replace(tmp_path, index_path)
     if int(hours) == 24:
         tmp_path = f"{INDEX_PATH}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(payload, handle, indent=2)
+            json.dump(payload, handle, separators=(",", ":"))
             handle.write("\n")
         os.replace(tmp_path, INDEX_PATH)
 
 
-def attach_image_metadata(species):
+def reusable_image_meta(existing_by_species, bird):
+    if not existing_by_species:
+        return None
+    existing = existing_by_species.get(bird["sci_name"])
+    if not existing:
+        return None
+    if existing.get("image") != bird.get("image"):
+        return None
+    if existing.get("detail_image") != bird.get("detail_image"):
+        return None
+    if existing.get("image_version") != bird.get("image_version"):
+        return None
+    if not existing.get("has_image"):
+        return None
+    if not existing.get("image_width") or not existing.get("image_height"):
+        return None
+    if not existing.get("mask"):
+        return None
+    return existing
+
+
+def attach_image_metadata(species, existing_by_species=None, image_meta_cache=None):
     for bird in species:
         image_path = os.path.join(HOME, "BirdSongs", "Extracted", bird["image"])
         bird["has_image"] = os.path.exists(image_path)
@@ -493,22 +625,34 @@ def attach_image_metadata(species):
         bird.pop("image_width", None)
         bird.pop("image_height", None)
         bird.pop("mask", None)
+        bird.pop("image_version", None)
+        bird.pop("detail_image_version", None)
+        if bird["has_image"]:
+            bird["image_version"] = int(os.path.getmtime(image_path))
+        if bird["has_detail_image"]:
+            bird["detail_image_version"] = int(os.path.getmtime(detail_path))
         if not bird["has_image"]:
             continue
-        try:
-            meta = image_mask_metadata(image_path)
-        except Exception as exc:
-            print(f"Could not read mask for {bird['com_name']}: {exc}", file=sys.stderr)
+        existing = reusable_image_meta(existing_by_species, bird)
+        if existing:
+            bird["image_width"] = existing["image_width"]
+            bird["image_height"] = existing["image_height"]
+            bird["mask"] = existing["mask"]
             continue
+        cache_key = (image_path, bird.get("image_version"))
+        meta = image_meta_cache.get(cache_key) if image_meta_cache is not None else None
+        if meta is None:
+            try:
+                meta = image_mask_metadata(image_path)
+            except Exception as exc:
+                print(f"Could not read mask for {bird['com_name']}: {exc}", file=sys.stderr)
+                continue
+            if image_meta_cache is not None:
+                image_meta_cache[cache_key] = meta
         bird["image_width"] = meta["image_width"]
         bird["image_height"] = meta["image_height"]
         if meta["mask"]:
             bird["mask"] = meta["mask"]
-        if bird["has_detail_image"]:
-            try:
-                atomic_make_background_transparent(detail_path)
-            except Exception as exc:
-                print(f"Could not clean detail image for {bird['com_name']}: {exc}", file=sys.stderr)
 
 
 def read_existing_species():
@@ -531,8 +675,87 @@ def read_existing_species_for_hours(hours):
         return []
 
 
-def build_index(args, hours):
-    species = get_species(hours, args.limit)
+def bird_image_present(bird, variant):
+    field = "detail_image" if variant == "detail" else "image"
+    flag = "has_detail_image" if variant == "detail" else "has_image"
+    rel_path = bird.get(field)
+    if not rel_path:
+        return False
+    abs_path = os.path.join(HOME, "BirdSongs", "Extracted", rel_path)
+    return bool(bird.get(flag)) and os.path.exists(abs_path)
+
+
+def metadata_lookup_pending(bird, meta_cache=None):
+    if bird.get("description"):
+        return False
+    cache = meta_cache if meta_cache is not None else load_meta_cache()
+    cached = cache.get(bird.get("sci_name", ""), {})
+    if cached.get("description"):
+        return False
+    checked_at = cached.get("date_created", "")
+    retry_before = (dt.date.today() - dt.timedelta(days=7)).isoformat()
+    if "description" in cached and checked_at >= retry_before:
+        return False
+    return True
+
+
+def index_has_pending_work(payload, args):
+    species = payload.get("species") or []
+    variants = ("collage", "detail") if args.variant == "both" else (args.variant,)
+    meta_cache = None if args.skip_enrich else load_meta_cache()
+    for bird in species:
+        if args.sci and bird.get("sci_name") != args.sci:
+            continue
+        if bird_image_present(bird, "collage") and not (
+            bird.get("image_width") and bird.get("image_height") and bird.get("mask")
+        ):
+            return True
+        if args.generate:
+            for variant in variants:
+                if not bird_image_present(bird, variant):
+                    return True
+        if not args.skip_enrich and metadata_lookup_pending(bird, meta_cache):
+            return True
+    return False
+
+
+def index_is_current(hours, args):
+    index_path = index_path_for_hours(hours)
+    if not os.path.exists(index_path):
+        return False
+    if os.path.getmtime(__file__) > os.path.getmtime(index_path):
+        return False
+    if os.path.exists(DB_PATH) and os.path.getmtime(DB_PATH) > os.path.getmtime(index_path):
+        return False
+    payload = read_json(index_path, {})
+    if payload.get("index_schema") != INDEX_SCHEMA_VERSION:
+        return False
+    if not payload.get("species") and payload.get("species_count", 0):
+        return False
+    return not index_has_pending_work(payload, args)
+
+
+def indexes_are_current(hours_list, args):
+    if args.force:
+        return False
+    return all(index_is_current(hours, args) for hours in hours_list)
+
+
+def build_index(args, hours, conn=None, labels=None, recordings_cache=None, image_meta_cache=None):
+    species = get_species(
+        hours,
+        args.limit,
+        conn=conn,
+        labels=labels,
+        recordings_cache=recordings_cache,
+    )
+    existing_by_species = {}
+    if not args.force:
+        existing_by_species = {
+            bird.get("sci_name"): bird
+            for bird in read_existing_species_for_hours(hours)
+            if bird.get("sci_name")
+        }
     if args.generate and species:
         key = api_key()
         if not key:
@@ -559,7 +782,7 @@ def build_index(args, hours):
                 if generated_any:
                     generated += 1
 
-    attach_image_metadata(species)
+    attach_image_metadata(species, existing_by_species, image_meta_cache=image_meta_cache)
     enrich_metadata(species, fetch_missing=not args.skip_enrich)
     write_index(species, hours)
     print(f"Wrote {index_path_for_hours(hours)} with {len(species)} species.")
@@ -577,13 +800,33 @@ def main():
     parser.add_argument("--sci", default="", help="only generate images for this scientific name")
     parser.add_argument("--variant", choices=("collage", "detail", "both"), default="both", help="image variant to generate")
     parser.add_argument("--skip-enrich", action="store_true", help="skip slow external metadata lookups")
+    parser.add_argument("--if-stale", action="store_true", help="exit without rebuilding when indexes are already current")
     args = parser.parse_args()
 
+    hours_list = RANGE_HOURS if args.all_ranges else (args.hours,)
+    if args.if_stale and indexes_are_current(hours_list, args):
+        print("Collage indexes already current; nothing to do.")
+        return
+
+    labels = load_labels()
     if args.all_ranges:
-        for hours in RANGE_HOURS:
-            build_index(args, hours)
+        conn = open_db()
+        recordings_cache = {}
+        image_meta_cache = {}
+        try:
+            for hours in hours_list:
+                build_index(
+                    args,
+                    hours,
+                    conn=conn,
+                    labels=labels,
+                    recordings_cache=recordings_cache,
+                    image_meta_cache=image_meta_cache,
+                )
+        finally:
+            conn.close()
     else:
-        build_index(args, args.hours)
+        build_index(args, args.hours, labels=labels)
 
 
 if __name__ == "__main__":
