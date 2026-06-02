@@ -25,8 +25,8 @@ install_depends() {
 
 set_hostname() {
   if [ "$(hostname)" == "raspberrypi" ];then
-    hostnamectl set-hostname birdnetpi
-    sed -i 's/raspberrypi/birdnetpi/g' /etc/hosts
+    hostnamectl set-hostname birddog
+    sed -i 's/raspberrypi/birddog/g' /etc/hosts
   fi
 }
 

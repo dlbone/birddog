@@ -100,7 +100,7 @@ systemctl --no-pager status caddy
 From another device on the same network, try:
 
 ```text
-http://birdnetpi.local
+http://birddog.local
 ```
 
 or:

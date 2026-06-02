@@ -545,18 +545,19 @@ def build_index(args, hours):
                 if generated >= args.max_new:
                     break
                 variants = ("collage", "detail") if args.variant == "both" else (args.variant,)
+                generated_any = False
                 for variant in variants:
-                    if generated >= args.max_new:
-                        break
                     has_field = "has_detail_image" if variant == "detail" else "has_image"
                     if bird.get(has_field) and not args.force:
                         continue
                     try:
                         generate_image(bird, key, args.model, args.force, variant)
-                        generated += 1
+                        generated_any = True
                     except Exception as exc:
                         print(f"Could not generate {variant} image for {bird['com_name']}: {exc}", file=sys.stderr)
                     time.sleep(1)
+                if generated_any:
+                    generated += 1
 
     attach_image_metadata(species)
     enrich_metadata(species, fetch_missing=not args.skip_enrich)
@@ -572,7 +573,7 @@ def main():
     parser.add_argument("--generate", action="store_true", help="generate missing images with Gemini")
     parser.add_argument("--force", action="store_true", help="regenerate existing images")
     parser.add_argument("--model", default=os.environ.get("GEMINI_IMAGE_MODEL", DEFAULT_MODEL))
-    parser.add_argument("--max-new", type=int, default=3, help="max new images per run")
+    parser.add_argument("--max-new", type=int, default=3, help="max species to generate per run")
     parser.add_argument("--sci", default="", help="only generate images for this scientific name")
     parser.add_argument("--variant", choices=("collage", "detail", "both"), default="both", help="image variant to generate")
     parser.add_argument("--skip-enrich", action="store_true", help="skip slow external metadata lookups")

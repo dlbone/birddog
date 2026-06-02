@@ -105,7 +105,7 @@ For common fixes, see [troubleshooting.md](troubleshooting.md).
 From the same network:
 
 ```text
-http://birdnetpi.local
+http://birddog.local
 ```
 
 or:

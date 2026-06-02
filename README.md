@@ -40,7 +40,7 @@ cd BirdNET-Pi
 Open:
 
 ```text
-http://birdnetpi.local
+http://birddog.local
 ```
 
 or:

@@ -215,4 +215,4 @@ fi
 "$REPO_DIR/scripts/install_birddog_customizations.sh" "${custom_args[@]}"
 
 echo "Birddog install complete."
-echo "Open http://birdnetpi.local or the Pi's IP address from your browser."
+echo "Open http://birddog.local or the Pi's IP address from your browser."

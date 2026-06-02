@@ -122,7 +122,7 @@ else
   fail "no placeholder funding metadata"
 fi
 
-if grep -RIn "monalisa\|birddog.local\|git@github.com\|/home/admin" \
+if grep -RIn "monalisa\|git@github.com\|/home/admin" \
     --exclude-dir=.git --exclude-dir=birdnet \
     README.md docs install.sh scripts/install_birddog_customizations.sh \
     templates config SECURITY.md NOTICE.md .github/ISSUE_TEMPLATE >/tmp/birddog-doc-scan.out 2>&1; then
