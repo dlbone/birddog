@@ -45,6 +45,8 @@ IdentifiedSoFar.txt.bak
 Birders_Guide_Installer_Configuration.txt
 birdnet/
 templates/*.service
+!templates/birdnet_analysis.service
+!templates/birdnet_stats.service
 scripts/*.txt
 scripts/*.db
 scripts/__pycache__/
