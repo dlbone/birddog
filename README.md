@@ -46,6 +46,9 @@ More detail: [docs/hardware.md](docs/hardware.md).
 
 ## Quick Install
 
+For a step-by-step blank-Pi flow, use
+[docs/fresh-install-checklist.md](docs/fresh-install-checklist.md).
+
 On a fresh Raspberry Pi OS install:
 
 ```bash
