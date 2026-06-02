@@ -80,6 +80,9 @@ With `GEMINI_API_KEY` exported:
 ./install.sh
 ```
 
+The install now uses your current user context when creating systemd service
+templates, so there are no hardcoded `admin` home-path assumptions.
+
 Without a Gemini key:
 
 ```bash

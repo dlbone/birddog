@@ -37,6 +37,9 @@ cd BirdNET-Pi
 ./install.sh
 ```
 
+Install writes systemd service files from templates using the installer user and
+home directory, so it works on non-`admin` systems without path edits.
+
 Open:
 
 ```text
