@@ -69,6 +69,12 @@ function collage_window_label($hours) {
   return 'all time';
 }
 
+function collage_subtitle($hours) {
+  if ($hours === -1) return 'A record of birds detected by ear since midnight.';
+  if ($hours === 1000000) return 'A record of birds detected by ear across all time.';
+  return 'A record of birds detected by ear in the ' . collage_window_label($hours) . '.';
+}
+
 function collage_daily_note() {
   $notes = [
     ['Tiny beaks at dawn.', 'The yard keeps soft secrets.'],
@@ -115,10 +121,10 @@ $daily_note = collage_daily_note();
     </div>
     <header class="collage-header">
       <h2>Recent Visitors</h2>
-      <p class="field-guide-subtitle">A record of birds detected by ear in <?php echo htmlspecialchars(collage_window_label($requested_hours)); ?>.</p>
+      <p class="field-guide-subtitle"><?php echo htmlspecialchars(collage_subtitle($requested_hours)); ?></p>
     </header>
     <div class="collage-empty" <?php if (count($birds) > 0) echo 'hidden'; ?>>No detections yet. The plate will fill in as BirdNET hears species.</div>
-    <div class="bird-collage <?php echo collage_count_class(count($birds)); ?>" aria-label="Recently heard birds collage" <?php if (count($birds) === 0) echo 'hidden'; ?>>
+    <div class="bird-collage <?php echo collage_count_class(count($birds)); ?>" data-layout="pending" aria-label="Recently heard birds collage" <?php if (count($birds) === 0) echo 'hidden'; ?>>
       <?php foreach ($birds as $idx => $bird) {
           $name = htmlspecialchars($bird['com_name']);
           $sci = htmlspecialchars($bird['sci_name']);
@@ -185,11 +191,13 @@ $daily_note = collage_daily_note();
   const modalList = modal.querySelector('.bird-modal-list');
   const modalRecordingCount = modal.querySelector('.bird-modal-section-title span');
   const closeButton = modal.querySelector('.bird-modal-close');
+  const rangeNav = document.querySelector('.collage-range');
   let lastGeneratedAt = initialIndex.generated_at || '';
   let currentBirds = initialIndex.species || [];
   let lastPayloadSig = payloadSignature(initialIndex);
   let pollDelay = 5000;
   let activeModalSci = '';
+  let renderSeq = 0;
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
 
   function escapeHtml(value) {
@@ -591,12 +599,13 @@ $daily_note = collage_daily_note();
       });
   }
 
-  function render(payload) {
+  function applyPayload(payload) {
     const birds = payload.species || [];
     lastGeneratedAt = payload.generated_at || lastGeneratedAt;
     lastPayloadSig = payloadSignature(payload);
     currentBirds = birds;
     collage.className = `bird-collage ${countClass(birds.length)}`;
+    collage.dataset.layout = 'pending';
     collage.innerHTML = birds.map(birdMarkup).join('');
     if (recentList) recentList.innerHTML = recentListMarkup(birds);
     collage.querySelectorAll('img').forEach(img => {
@@ -609,6 +618,16 @@ $daily_note = collage_daily_note();
       const modalIdx = currentBirds.findIndex(bird => bird.sci_name === activeModalSci);
       if (modalIdx >= 0) openModal(modalIdx);
     }
+  }
+
+  function render(payload) {
+    const seq = ++renderSeq;
+    const fadeDelay = collage.dataset.layout === 'ready' ? 170 : 0;
+    collage.dataset.layout = 'pending';
+    window.setTimeout(function() {
+      if (seq !== renderSeq) return;
+      applyPayload(payload);
+    }, fadeDelay);
   }
 
   let collagePlaced = [];
@@ -632,6 +651,9 @@ $daily_note = collage_daily_note();
     });
     window.SilhouettePack.applyLayout(placed);
     collagePlaced = placed.filter(tile => tile.x > -1000);
+    requestAnimationFrame(function() {
+      collage.dataset.layout = 'ready';
+    });
   }
 
   function maskHitTest(clientX, clientY) {
@@ -745,6 +767,18 @@ $daily_note = collage_daily_note();
   });
   window.addEventListener('load', packBirds);
   requestAnimationFrame(packBirds);
+
+  if (rangeNav) {
+    rangeNav.addEventListener('click', function(event) {
+      const link = event.target.closest('a');
+      if (!link || link.classList.contains('active')) return;
+      event.preventDefault();
+      collage.dataset.layout = 'pending';
+      window.setTimeout(function() {
+        window.location.href = link.href;
+      }, 120);
+    });
+  }
 
   async function poll() {
     try {

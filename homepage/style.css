@@ -702,6 +702,16 @@ button:hover {
   padding: clamp(8px, 1vw, 16px);
   align-self: stretch;
   z-index: 2;
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.bird-collage[data-layout="pending"] {
+  opacity: 0;
+}
+
+.bird-collage[data-layout="ready"] {
+  opacity: 1;
 }
 
 .collage-bird {
