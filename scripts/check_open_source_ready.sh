@@ -101,7 +101,7 @@ else
 fi
 
 section "Docs"
-for file in README.md CONTRIBUTING.md docs/hardware.md SECURITY.md config/birddog.env.example scripts/birddog_doctor.sh; do
+for file in README.md NOTICE.md CONTRIBUTING.md docs/hardware.md SECURITY.md config/birddog.env.example scripts/birddog_doctor.sh; do
   if [ -f "$file" ]; then
     ok "$file exists"
   else
@@ -118,7 +118,7 @@ fi
 if grep -RIn "monalisa\|birddog.local\|git@github.com\|/home/admin" \
     --exclude-dir=.git --exclude-dir=birdnet \
     README.md docs install.sh scripts/install_birddog_customizations.sh \
-    templates config SECURITY.md .github/ISSUE_TEMPLATE >/tmp/birddog-doc-scan.out 2>&1; then
+    templates config SECURITY.md NOTICE.md .github/ISSUE_TEMPLATE >/tmp/birddog-doc-scan.out 2>&1; then
   cat /tmp/birddog-doc-scan.out >&2
   fail "public setup files do not contain private/local leftovers"
 else

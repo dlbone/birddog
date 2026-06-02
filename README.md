@@ -8,6 +8,7 @@ simple field notes.
 This project is based on [BirdNET-Pi](https://github.com/Nachtzuster/BirdNET-Pi)
 and the [BirdNET Analyzer](https://github.com/kahst/BirdNET-Analyzer). Respect
 the upstream licenses and BirdNET non-commercial restrictions.
+See [NOTICE.md](NOTICE.md) for attribution and generated-data notes.
 
 ## What Birddog Adds
 
