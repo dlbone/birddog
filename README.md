@@ -290,6 +290,7 @@ cp /path/to/birddog-birds.db ~/BirdNET-Pi/scripts/birds.db
 ```
 
 More detailed rebuild notes are in [docs/birddog-rebuild.md](docs/birddog-rebuild.md).
+For common first-run problems, see [docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Validation
 

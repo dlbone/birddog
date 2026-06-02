@@ -37,6 +37,8 @@ Describe the problem and what you expected instead.
 
 ## Checks
 
+Please check `docs/troubleshooting.md` first.
+
 Please paste the output of the relevant commands.
 
 ```bash

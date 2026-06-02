@@ -97,6 +97,7 @@ scripts/birddog_doctor.sh
 A working install should show the microphone, BirdNET services, collage timer,
 and local web endpoints as OK. Warnings are useful clues; `FAIL` lines need
 attention.
+For common fixes, see [troubleshooting.md](troubleshooting.md).
 
 ## 8. Open The Dashboard
 
