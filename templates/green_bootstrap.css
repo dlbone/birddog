@@ -3,7 +3,7 @@ body {
     font-size: 13px;
     padding-top: 80px;
     color: #333;
-    background-color: rgb(119, 196, 135);
+    background-color: #f6eedc;
 }
 
 body::-webkit-scrollbar {
@@ -27,12 +27,12 @@ wbr {
 }
 
 .navbar {
-    background-color: rgb(119, 196, 135);
-    border-color: #33b667;
+    background-color: #f6eedc;
+    border-color: #d7c7a8;
 }
 
 .navbar-brand, .navbar-brand:hover {
-    color: #fff;
+    color: #2b2820;
     margin-right: 0;
 }
 
@@ -137,9 +137,9 @@ select {
 }
 
 .card-header {
-    background-color: #33b770!important;
-    border-color: #33b770!important;
-    color: #fff!important;
+    background-color: #efe4cf!important;
+    border-color: #d7c7a8!important;
+    color: #2b2820!important;
 }
 
 .progress {

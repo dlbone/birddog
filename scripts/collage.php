@@ -9,12 +9,12 @@ $range_options = [
   ['label' => '7d', 'hours' => 168, 'file' => 'index-168h.json'],
   ['label' => 'all', 'hours' => 1000000, 'file' => 'index-all.json'],
 ];
-$requested_hours = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+$requested_hours = isset($_GET['hours']) ? intval($_GET['hours']) : -1;
 $allowed_hours = array_map(function($opt) { return $opt['hours']; }, $range_options);
 if (!in_array($requested_hours, $allowed_hours, true)) {
-  $requested_hours = 24;
+  $requested_hours = -1;
 }
-$active_range = $range_options[3];
+$active_range = $range_options[2];
 foreach ($range_options as $option) {
   if ($option['hours'] === $requested_hours) {
     $active_range = $option;
@@ -129,13 +129,12 @@ $daily_note = collage_daily_note();
           $name = htmlspecialchars($bird['com_name']);
           $sci = htmlspecialchars($bird['sci_name']);
           $count = intval($bird['recent_count']);
-          $num = str_pad(strval($idx + 1), 2, '0', STR_PAD_LEFT);
           if (!empty($bird['has_image'])) {
             $src = htmlspecialchars($bird['image']);
-            echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><small>$num</small><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
+            echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
           } else {
             $initials = htmlspecialchars(bird_initials($bird['com_name']));
-            echo "<figure class=\"collage-bird collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\"><div>$initials</div><figcaption><small>$num</small><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
+            echo "<figure class=\"collage-bird collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\"><div>$initials</div><figcaption><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
           }
         } ?>
     </div>
@@ -270,12 +269,11 @@ $daily_note = collage_daily_note();
     const name = escapeHtml(bird.com_name);
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
-    const num = String(idx + 1).padStart(2, '0');
     if (bird.has_image) {
       const src = escapeHtml(assetUrl(bird.image));
-      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><small>${num}</small><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
+      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
     }
-    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><small>${num}</small><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
+    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
   }
 
   function recentListMarkup(birds) {

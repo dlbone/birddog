@@ -6,7 +6,7 @@ header('Content-Type: application/json');
 header('Cache-Control: no-store');
 
 $home = get_home();
-$hours = isset($_GET['hours']) ? intval($_GET['hours']) : 24;
+$hours = isset($_GET['hours']) ? intval($_GET['hours']) : -1;
 $range_files = [
   1 => 'index-1h.json',
   12 => 'index-12h.json',
@@ -17,7 +17,7 @@ $range_files = [
 ];
 
 if (!array_key_exists($hours, $range_files)) {
-  $hours = 24;
+  $hours = -1;
 }
 
 $index_path = $home . '/BirdSongs/Extracted/collage/' . $range_files[$hours];

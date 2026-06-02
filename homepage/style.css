@@ -41,7 +41,7 @@ body.collage-shell iframe {
 
 body {
   margin: 0;
-  background-color: rgb(119, 196, 135);
+  background-color: #f6eedc;
 }
 
 body.modal-open {
@@ -62,7 +62,7 @@ table {
 td {
   padding: 10px;
   vertical-align: top;
-  background-color: rgb(219, 255, 235);
+  background-color: #fbf5e7;
   font-weight: lighter;
   text-align: center;
 }
@@ -199,7 +199,7 @@ button:hover {
 }
 
 .topnav {
-  background-color: rgb(159, 226, 155);
+  background-color: #f6eedc;
   display: flex;
   flex: 65%;
   width: 65%;
@@ -231,18 +231,18 @@ button:hover {
 }
 
 .topnav button:hover {
-  background-color: rgb(219, 255, 235);
-  color: black;
+  background-color: #eadfc8;
+  color: #2b2820;
 }
 
 .topnav button.active {
-  background-color: #04AA6D;
-  color: white;
+  background-color: #8b371e;
+  color: #fff8ec;
 }
 
 .topnav .button-hover {
-  background-color: rgb(219, 255, 235) !important;
-  color: black;
+  background-color: #eadfc8 !important;
+  color: #2b2820;
 }
 
 .topnav .icon {
@@ -254,7 +254,7 @@ button:hover {
 }
 
 .overview th {
-  background-color: rgb(219, 255, 235);
+  background-color: #efe4cf;
   text-align: center;
   padding: 12px;
 }
@@ -811,20 +811,11 @@ button:hover {
   display: block;
 }
 
-.collage-bird figcaption small,
 .collage-bird figcaption b,
 .collage-bird figcaption span,
 .collage-bird figcaption i {
   display: block;
   line-height: 1.25;
-}
-
-.collage-bird figcaption small {
-  margin-bottom: 3px;
-  color: #8b371e;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1px;
 }
 
 .collage-bird figcaption b {
@@ -1167,15 +1158,15 @@ button:hover {
 }
 
 .views .centered button {
-  background-color: rgb(219, 255, 235);
+  background-color: #fbf5e7;
   padding: 12px;
   transition:box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow:0px 3px 1px -2px rgb(0 0 0 / 20%), 0px 2px 2px 0px rgb(0 0 0 / 14%), 0px 1px 5px 0px rgb(0 0 0 / 12%);
 }
 
 .views .centered button:hover {
-  background-color: rgb(159, 226, 155);
-  color: black;
+  background-color: #eadfc8;
+  color: #2b2820;
   box-shadow:0px 2px 4px -1px rgb(0 0 0 / 20%), 0px 4px 5px 0px rgb(0 0 0 / 14%), 0px 1px 10px 0px rgb(0 0 0 / 12%);
 }
 
@@ -1196,13 +1187,13 @@ button:hover {
 }
 
 .settings button {
-  background-color: rgb(219, 255, 235);
+  background-color: #fbf5e7;
   padding: 12px;
 }
 
 .settings button:hover {
-  background-color: rgb(159, 226, 155);
-  color: black;
+  background-color: #eadfc8;
+  color: #2b2820;
 }
 
 .float button {
@@ -1226,7 +1217,7 @@ button:hover {
 
 .customlabels button,.customlabels2 button {
   padding: 12px;
-  background-color: rgb(219, 255, 235);
+  background-color: #fbf5e7;
   
   width: 100%;
 }
@@ -1276,13 +1267,13 @@ button:hover {
 }
 
 .servicecontrols button {
-  background-color: rgb(219, 255, 235);
+  background-color: #fbf5e7;
   padding: 12px;
   width: 50%;
 }
 
 .systemcontrols button {
-  background-color: rgb(219, 255, 235);
+  background-color: #fbf5e7;
   display: block;
   padding: 12px;
   width: 50%;
@@ -1318,7 +1309,7 @@ button:hover {
   width: 25px;
   height: 25px;
   border-radius: 50%;
-  background: #04AA6D;
+  background: #8b371e;
   cursor: pointer;
 }
 
@@ -1326,7 +1317,7 @@ button:hover {
   width: 25px;
   height: 25px;
   border-radius: 50%;
-  background: #04AA6D;
+  background: #8b371e;
   cursor: pointer;
 }
 
@@ -1381,7 +1372,7 @@ button:hover {
   .systemcontrols button,.servicecontrols button {
     width: 60%;
     padding: 12px;
-    background-color: rgb(219, 255, 235);
+    background-color: #fbf5e7;
   }
   .topnav {
     flex: 100%;
@@ -1421,7 +1412,7 @@ button:hover {
   .systemcontrols button,.servicecontrols button {
     width: 80%;
     padding: 12px;
-    background-color: rgb(219, 255, 235);
+    background-color: #fbf5e7;
   }
   .stats img {
     width: 100%;
@@ -1655,19 +1646,19 @@ button:hover {
 .sortbutton {
   margin-top:10px;
   font-size:x-large;
-  background:#77c487;
+  background:#efe4cf;
   padding:5px;
   box-shadow: 0px 0px 5px 2px rgba(0, 0, 0, 0.10);
 }
 
 .sortbutton:hover {
-  background-color: #dbffeb;
-  color: white;
+  background-color: #eadfc8;
+  color: #2b2820;
 }
 
 .sortbutton.active {
-  background-color: #dbffeb;
-  color: white;
+  background-color: #eadfc8;
+  color: #2b2820;
 }
 
 button.legacyview {
@@ -1678,7 +1669,7 @@ button.legacyview {
   z-index:100;
   position:relative;
   font-size:small;
-  background:#dbffeb;
+  background:#fbf5e7;
   padding:5px;
   transition:box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow:0px 3px 1px -2px rgb(0 0 0 / 20%), 0px 2px 2px 0px rgb(0 0 0 / 14%), 0px 1px 5px 0px rgb(0 0 0 / 12%);
@@ -1691,7 +1682,7 @@ button.legacyview:hover  {
 button.loadmore {
   margin-top:10px;
   font-size:x-large;
-  background:#dbffeb;
+  background:#fbf5e7;
   padding:10px;
   transition:box-shadow 280ms cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow:0px 3px 1px -2px rgb(0 0 0 / 20%), 0px 2px 2px 0px rgb(0 0 0 / 14%), 0px 1px 5px 0px rgb(0 0 0 / 12%);
@@ -1711,7 +1702,7 @@ button.loadmore:hover {
 }
 
 tr {
-  background-color:#9fe29b;
+  background-color:#efe4cf;
 }
 
 .history.centered form {
@@ -1815,7 +1806,7 @@ dialog::backdrop {
 
 .brbanner {
   padding:15px;
-  background-color:rgb(159, 226, 155);
+  background-color:#efe4cf;
   text-align:center;
   font-size:large;
 }
@@ -1915,7 +1906,7 @@ pre#timer.bash {
   height:5px;
   line-height:5px;
   padding:3px;
-  background-color:#9fe29b
+  background-color:#efe4cf
 }
 
 #newrtspstream{
@@ -1924,12 +1915,12 @@ pre#timer.bash {
   height: 5px;
   line-height: 5px;
   padding: 3px;
-  background-color: #9fe29b;
+  background-color: #efe4cf;
 }
 
 .exclude_species_list_option_highlight {
   color: black;
-  background-color: rgb(119, 196, 135);
+  background-color: #eadfc8;
   font-weight: bolder;
 }
 
