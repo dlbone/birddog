@@ -99,6 +99,16 @@ preflight() {
     fi
   fi
 
+  if command -v arecord >/dev/null 2>&1; then
+    if arecord -l 2>/dev/null | grep -qiE 'card [0-9]'; then
+      echo "OK   ALSA recording device visible"
+    else
+      echo "WARN no ALSA recording device visible; plug in a USB mic before expecting detections"
+    fi
+  else
+    echo "WARN arecord is not installed yet; microphone check skipped"
+  fi
+
   for path in \
     "$REPO_DIR/scripts/install_birdnet.sh" \
     "$REPO_DIR/scripts/install_birddog_customizations.sh" \

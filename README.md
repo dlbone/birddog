@@ -69,8 +69,9 @@ The installer runs the base BirdNET-Pi install from this checkout and then
 applies the Birddog dashboard, timer, image prompt, Python dependency, and
 optional Gemini-key setup.
 `./install.sh --check` is non-destructive; it verifies prerequisites without
-prompting for sudo. If it warns that sudo credentials are not cached, the real
-install can still prompt normally.
+prompting for sudo. It also warns if no ALSA recording device is visible. If it
+warns that sudo credentials are not cached, the real install can still prompt
+normally.
 Advanced users can also run
 `scripts/install_birddog_customizations.sh --check` to verify only the Birddog
 customization layer.

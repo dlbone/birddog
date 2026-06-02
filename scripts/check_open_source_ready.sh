@@ -58,6 +58,9 @@ section "Installer"
 run_check "install.sh help" sh -c './install.sh --help >/dev/null'
 run_check "customization installer help" sh -c 'scripts/install_birddog_customizations.sh --help >/dev/null'
 run_check "install.sh preflight" ./install.sh --check --skip-birdnet --skip-python-deps
+run_check "install.sh preflight checks microphone visibility" sh -c \
+  './install.sh --check --skip-birdnet --skip-python-deps >/tmp/birddog-install-preflight.out && grep -Eq "ALSA recording device visible|no ALSA recording device visible|arecord is not installed" /tmp/birddog-install-preflight.out'
+rm -f /tmp/birddog-install-preflight.out
 run_check "customization installer preflight" scripts/install_birddog_customizations.sh --check
 run_check "install.sh accepts GEMINI_API_KEY env" sh -c \
   'GEMINI_API_KEY=test-key ./install.sh --check --skip-birdnet --skip-python-deps >/tmp/birddog-install-envcheck.out && grep -q "Gemini key provided by GEMINI_API_KEY" /tmp/birddog-install-envcheck.out'
