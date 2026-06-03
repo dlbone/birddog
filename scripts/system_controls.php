@@ -103,7 +103,6 @@ var uploader = new plupload.Uploader({
 
         FileUploaded: function(up, file, info) {
             // Called when file has finished uploading
-            console.log('[FileUploaded] File:', file, "Info:", info);
             const xhttp = new XMLHttpRequest();
             xhttp.onload = function() {
                 if(this.responseText.length > 0) {

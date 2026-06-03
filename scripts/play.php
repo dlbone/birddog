@@ -221,7 +221,6 @@ function toggleShiftFreq(filename, shiftAction, elem) {
         elem.setAttribute("src","images/unshift.svg");
         elem.setAttribute("title", "This file has been shifted down in frequency.");
         elem.setAttribute("onclick", elem.getAttribute("onclick").replace("shift","unshift"));
-	console.log("shifted freqs of " + filename);
         const audioDiv = elem.parentNode.querySelector(".custom-audio-player");
         if (audioDiv) {
           audioDiv.setAttribute("data-audio-src", audioDiv.getAttribute("data-audio-src").replace("/By_Date/", "/By_Date/shifted/"));
@@ -235,7 +234,6 @@ function toggleShiftFreq(filename, shiftAction, elem) {
         elem.setAttribute("src","images/shift.svg");
         elem.setAttribute("title", "This file is not shifted in frequency.");
         elem.setAttribute("onclick", elem.getAttribute("onclick").replace("unshift","shift"));
-        console.log("unshifted freqs of " + filename);
         const audioDiv = elem.parentNode.querySelector(".custom-audio-player");
         if (audioDiv) {
           audioDiv.setAttribute("data-audio-src", audioDiv.getAttribute("data-audio-src").replace("/By_Date/shifted/", "/By_Date/"));
@@ -249,10 +247,8 @@ function toggleShiftFreq(filename, shiftAction, elem) {
     }
   }
   if(shiftAction == "shift") {
-    console.log("shifting freqs of " + filename);
     xhttp.open("GET", "play.php?shiftfile="+filename+"&doshift=true", true);
   } else {
-    console.log("unshifting freqs of " + filename);
     xhttp.open("GET", "play.php?shiftfile="+filename, true);  
   }
   xhttp.send();

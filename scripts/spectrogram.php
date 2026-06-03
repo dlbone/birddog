@@ -178,8 +178,6 @@ function fitTextOnCanvas(text,fontface,yPosition){
 }
 
 function applyText(text,x,y,opacity) {
-  console.log("conf: "+opacity)
-  console.log(text+" "+parseInt(x)+" "+y)
   if(opacity < 0.2) {
     opacity = 0.2;
   }
@@ -200,15 +198,12 @@ function loadDetectionIfNewExists() {
     if(this.responseText.length > 0 && !this.responseText.includes("Database")) {
       const resp = JSON.parse(this.responseText);
       newest_file = resp.file_name;
-      console.log("delay " + resp.delay);
       for (detection of resp.detections) {
-        console.log("detection.start  " + detection.start);
         secago = resp.delay - detection.start;
         x = document.body.querySelector('canvas').width - (secago * avgfps);
         y = (document.body.querySelector('canvas').height * 0.50) + add;
         if(x > document.body.querySelector('canvas').width - (5*avgfps) && detection.common_name.length > 8) {
           setTimeout(function (detection, x, y, x_org) {
-            console.log("originally at "+x_org+", now waiting 3 sec and at "+x);
             applyText(detection.common_name, x, y, detection.confidence);
           }, 3*1000, detection, x - (5*avgfps), y, x);
         } else {
@@ -262,12 +257,6 @@ function toggleCompression(state) {
 }
 
 function toggleFreqshift(state) {
-  if (state == true) {
-    console.log("freqshift activated")
-  } else {
-    console.log("freqshift deactivated")
-  }
-
   freqShiftReconnectDelay = <?php echo $FREQSHIFT_RECONNECT_DELAY; ?>;
 
   var livestream_freqshift_spinner = document.getElementById('livestream_freqshift_spinner');
@@ -288,7 +277,6 @@ function toggleFreqshift(state) {
         //central_controls_element.appendChild(h1_loading);
         //Wait 2 seconds before restarting the stream
         setTimeout(function () {
-          console.log("Restarting connection with livestream");
           audio_player.pause();
           audio_player.setAttribute('src', 'stream');
           audio_player.load();
@@ -318,7 +306,6 @@ function initialize() {
   try{
     process();
   } catch(e) {
-    console.log(e)
     window.top.location.reload();
   }
 
@@ -343,7 +330,6 @@ function initialize() {
     document.getElementById("compression").removeAttribute("disabled");
     document.getElementById("freqshift").removeAttribute("disabled");
 
-    console.log(SOURCE);
     const DATA = new Uint8Array(ANALYSER.frequencyBinCount);
     const LEN = DATA.length;
     const h = (H / LEN + 0.9);

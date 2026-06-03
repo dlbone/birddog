@@ -49,6 +49,8 @@ templates/*.service
 !templates/birdnet_stats.service
 scripts/*.txt
 scripts/*.db
+scripts/*.db-shm
+scripts/*.db-wal
 scripts/__pycache__/
 analyzing_now.txt
 apprise.txt

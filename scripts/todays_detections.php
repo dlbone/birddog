@@ -365,7 +365,6 @@ if (get_included_files()[0] === __FILE__) {
   function blacklistImage() {
     const match = last_photo_link.match(/\d+$/); // match one or more digits
     const result = match ? match[0] : null; // extract the first match or return null if no match is found
-    console.log(last_photo_link)
     const xhttp = new XMLHttpRequest();
     xhttp.onload = function() {
       if(this.responseText.length > 0) {
