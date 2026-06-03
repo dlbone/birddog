@@ -17,13 +17,14 @@ terms, including the non-commercial restriction.
 
 ## License
 
-The top-level repository license is Creative Commons
-Attribution-NonCommercial-ShareAlike 4.0 International, matching the inherited
-BirdNET-Pi/BirdNET-Lite license notice in `LICENSE`.
+The inherited BirdNET-Pi, BirdNET-Lite, BirdNET Analyzer, model, and label
+material remains under the upstream Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International terms in `LICENSE`.
 
-Birddog-specific dashboard, collage, install, and documentation changes are
-distributed as an adaptation under the same license family unless a file says
-otherwise.
+Birddog-specific original dashboard, collage, install, and documentation
+additions are available under the MIT License in `LICENSE-BIRDDOG` where they
+can be used separately from upstream non-commercial material. Use of the
+combined repository is still limited by the upstream non-commercial terms.
 
 ## Generated And Local Data
 

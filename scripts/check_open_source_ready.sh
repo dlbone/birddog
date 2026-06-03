@@ -108,7 +108,7 @@ else
 fi
 
 section "Docs"
-for file in README.md NOTICE.md CONTRIBUTING.md docs/hardware.md docs/fresh-install-checklist.md docs/troubleshooting.md SECURITY.md config/birddog.env.example scripts/birddog_doctor.sh; do
+for file in README.md LICENSE LICENSE-BIRDDOG NOTICE.md CONTRIBUTING.md docs/hardware.md docs/fresh-install-checklist.md docs/troubleshooting.md SECURITY.md config/birddog.env.example scripts/birddog_doctor.sh; do
   if [ -f "$file" ]; then
     ok "$file exists"
   else

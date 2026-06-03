@@ -9,6 +9,14 @@ and the [BirdNET Analyzer](https://github.com/kahst/BirdNET-Analyzer). Respect
 the upstream licenses and BirdNET non-commercial restrictions. See
 [NOTICE.md](NOTICE.md) for attribution and generated-data notes.
 
+## License
+
+The inherited BirdNET-Pi/BirdNET material remains under the upstream
+Creative Commons Attribution-NonCommercial-ShareAlike 4.0 terms in
+[LICENSE](LICENSE). Birddog-specific original additions are available under the
+MIT License in [LICENSE-BIRDDOG](LICENSE-BIRDDOG) where they can be used
+separately from the upstream non-commercial code and models.
+
 ## Hardware
 
 Reference build:
