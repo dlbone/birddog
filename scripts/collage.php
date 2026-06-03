@@ -30,7 +30,7 @@ $index_rel = 'collage/' . $active_range['file'];
 $index_path = $home . '/BirdSongs/Extracted/' . $index_rel;
 $db_path = $home . '/BirdNET-Pi/scripts/birds.db';
 $lock_path = $home . '/BirdSongs/Extracted/collage/build-' . $requested_hours . '.lock';
-$collage_index_schema = 3;
+$collage_index_schema = 4;
 $collage_db_refresh_grace = 45;
 
 if (!file_exists(dirname($lock_path))) {
@@ -201,13 +201,16 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           $name = htmlspecialchars($bird['com_name']);
           $sci = htmlspecialchars($bird['sci_name']);
           $count = intval($bird['recent_count']);
+          $is_new_bird = !empty($bird['is_new_bird']);
+          $bird_classes = 'collage-bird' . ($is_new_bird ? ' is-new-bird' : '');
+          $new_badge = $is_new_bird ? '<span class="new-bird-badge">New Bird</span>' : '';
           if (!empty($bird['has_image'])) {
             $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
             $src = htmlspecialchars(collage_asset_url($bird['image'], $version));
-            echo "<figure class=\"collage-bird\" data-bird-idx=\"$idx\" tabindex=\"0\"><img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
+            echo "<figure class=\"$bird_classes\" data-bird-idx=\"$idx\" tabindex=\"0\">$new_badge<img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
           } else {
             $initials = htmlspecialchars(bird_initials($bird['com_name']));
-            echo "<figure class=\"collage-bird collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\"><div>$initials</div><figcaption><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
+            echo "<figure class=\"$bird_classes collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\">$new_badge<div>$initials</div><figcaption><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
           }
         } ?>
     </div>
@@ -342,6 +345,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
       Number(bird.total_count || 0),
       bird.last_heard || '',
       bird.first_heard || '',
+      bird.is_new_bird ? 1 : 0,
       bird.image || '',
       bird.detail_image || '',
       bird.has_image ? 1 : 0,
@@ -356,11 +360,13 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     const name = escapeHtml(bird.com_name);
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
+    const isNew = bird.is_new_bird ? ' is-new-bird' : '';
+    const badge = bird.is_new_bird ? '<span class="new-bird-badge">New Bird</span>' : '';
     if (bird.has_image) {
       const src = escapeHtml(assetUrl(bird.image, bird.image_version));
-      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
+      return `<figure class="collage-bird${isNew}" data-bird-idx="${idx}" tabindex="0">${badge}<img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
     }
-    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
+    return `<figure class="collage-bird${isNew} collage-placeholder" data-bird-idx="${idx}" tabindex="0">${badge}<div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
   }
 
   function recentListMarkup(birds) {
@@ -856,7 +862,9 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
       height
     });
     window.SilhouettePack.applyLayout(placed);
-    collagePlaced = placed.filter(tile => tile.x > -1000);
+    collagePlaced = placed
+      .filter(tile => tile.x > -1000)
+      .sort((a, b) => Number(a.node.style.zIndex || 0) - Number(b.node.style.zIndex || 0));
     lastPackKey = packKey;
     requestAnimationFrame(function() {
       collage.dataset.layout = 'ready';

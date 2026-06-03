@@ -155,6 +155,14 @@ class TestCollageMetadataState(unittest.TestCase):
             with patch.object(bird_collage, 'META_PATH', meta_path):
                 self.assertFalse(bird_collage.metadata_lookup_pending({'sci_name': 'Buteo lineatus'}))
 
+    def test_new_bird_badge_state_expires_after_24_hours(self):
+        now = dt.datetime(2026, 6, 3, 10, 0, 0)
+
+        self.assertTrue(bird_collage.is_new_bird('2026-06-02 10:00:00', now=now))
+        self.assertTrue(bird_collage.is_new_bird('2026-06-03 09:59:59', now=now))
+        self.assertFalse(bird_collage.is_new_bird('2026-06-02 09:59:59', now=now))
+        self.assertFalse(bird_collage.is_new_bird('manual seed', now=now))
+
 
 class TestReportingBatchDbWrites(unittest.TestCase):
 

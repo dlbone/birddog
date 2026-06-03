@@ -364,7 +364,7 @@
       tile.node.style.height = `${tile.fullH}px`;
       tile.node.style.left = `${hidden ? -99999 : tile.x}px`;
       tile.node.style.top = `${hidden ? -99999 : tile.y}px`;
-      tile.node.style.zIndex = String(100 + tile.idx);
+      tile.node.style.zIndex = String((tile.data && tile.data.is_new_bird ? 9000 : 100) + tile.idx);
       tile.node.style.setProperty('--bird-rotate', `${tile.rotate}deg`);
       const img = tile.node.querySelector('img');
       if (img) {

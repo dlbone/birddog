@@ -740,6 +740,30 @@ button:hover {
   filter: saturate(0.9) contrast(1.08);
 }
 
+.new-bird-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: 10002;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 7px;
+  border: 1px solid rgba(77, 62, 39, 0.30);
+  border-bottom-color: rgba(77, 62, 39, 0.52);
+  background: rgba(246, 238, 220, 0.94);
+  color: #332b20;
+  box-shadow: 0 4px 11px rgba(48, 38, 22, 0.18);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(246, 238, 220, 0.9);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .regen-image-btn {
   width: 28px;
   height: 28px;

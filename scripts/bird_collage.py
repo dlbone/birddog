@@ -36,7 +36,8 @@ DEFAULT_STYLE = (
 DEFAULT_MODEL = "gemini-2.5-flash-image"
 TODAY_HOURS = -1
 RANGE_HOURS = (1, 12, TODAY_HOURS, 24, 168, 1000000)
-INDEX_SCHEMA_VERSION = 3
+INDEX_SCHEMA_VERSION = 4
+NEW_BIRD_BADGE_HOURS = 24
 _IMAGE_LIBS = None
 _LABELS_CACHE = None
 _META_CACHE = None
@@ -117,6 +118,28 @@ def local_rarity(total_count):
     if total_count >= 3:
         return "occasional"
     return "new"
+
+
+def parse_detection_timestamp(value):
+    text = str(value or "").strip()
+    if not text or text == "manual seed":
+        return None
+    stamp = text[:19]
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return dt.datetime.strptime(stamp, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def is_new_bird(first_heard, now=None, badge_hours=NEW_BIRD_BADGE_HOURS):
+    first_seen = parse_detection_timestamp(first_heard)
+    if first_seen is None:
+        return False
+    now = now or dt.datetime.now()
+    age = now - first_seen
+    return dt.timedelta(0) <= age <= dt.timedelta(hours=badge_hours)
 
 
 def image_path_for(sci_name, com_name, variant="collage"):
@@ -259,6 +282,7 @@ def get_species(hours, limit, conn=None, labels=None, recordings_cache=None):
             "total_count": row["TotalCount"],
             "last_heard": row["LastHeard"],
             "first_heard": row["FirstHeard"],
+            "is_new_bird": is_new_bird(row["FirstHeard"]),
             "image": rel_image,
             "detail_image": rel_detail_image,
             "has_image": os.path.exists(image_path),

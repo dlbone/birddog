@@ -32,7 +32,7 @@ $all_lock_path = $home . '/BirdSongs/Extracted/collage/build-all.lock';
 $index_ttl = 300;
 $all_index_ttl = 900;
 $db_refresh_grace = 45;
-$collage_index_schema = 3;
+$collage_index_schema = 4;
 
 if (!file_exists(dirname($index_path))) {
   mkdir(dirname($index_path), 0775, true);
