@@ -742,8 +742,8 @@ button:hover {
 
 .new-bird-badge {
   position: absolute;
-  top: 4px;
-  right: 6px;
+  top: -18px;
+  left: 50%;
   z-index: 10002;
   display: inline-flex;
   align-items: center;
@@ -761,6 +761,7 @@ button:hover {
   text-transform: uppercase;
   text-shadow: 0 1px 0 rgba(246, 238, 220, 0.9);
   white-space: nowrap;
+  transform: translateX(-50%) rotate(calc(var(--bird-rotate, 0deg) * -1));
   pointer-events: none;
 }
 

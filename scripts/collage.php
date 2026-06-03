@@ -203,7 +203,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           $count = intval($bird['recent_count']);
           $is_new_bird = !empty($bird['is_new_bird']);
           $bird_classes = 'collage-bird' . ($is_new_bird ? ' is-new-bird' : '');
-          $new_badge = $is_new_bird ? '<span class="new-bird-badge">New Bird</span>' : '';
+          $new_badge = $is_new_bird ? '<span class="new-bird-badge">New</span>' : '';
           if (!empty($bird['has_image'])) {
             $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
             $src = htmlspecialchars(collage_asset_url($bird['image'], $version));
@@ -361,7 +361,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
     const isNew = bird.is_new_bird ? ' is-new-bird' : '';
-    const badge = bird.is_new_bird ? '<span class="new-bird-badge">New Bird</span>' : '';
+    const badge = bird.is_new_bird ? '<span class="new-bird-badge">New</span>' : '';
     if (bird.has_image) {
       const src = escapeHtml(assetUrl(bird.image, bird.image_version));
       return `<figure class="collage-bird${isNew}" data-bird-idx="${idx}" tabindex="0">${badge}<img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
