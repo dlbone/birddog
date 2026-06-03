@@ -575,6 +575,7 @@ button:hover {
   text-transform: uppercase;
   letter-spacing: 1px;
   font-size: 10px;
+  line-height: 2;
 }
 
 .field-script-note {
