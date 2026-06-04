@@ -418,6 +418,43 @@ button:hover {
   text-transform: uppercase;
 }
 
+.field-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  border-bottom: 1px solid rgba(78, 65, 44, 0.27);
+  padding-bottom: 18px;
+}
+
+.field-mode-tabs a {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  color: #4a4235;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 12px;
+  letter-spacing: 1.6px;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.field-mode-tabs a.active {
+  color: #8b371e;
+}
+
+.field-mode-tabs a.active::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: calc(100% - 12px);
+  height: 8px;
+  transform: translateX(-50%);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 14' preserveAspectRatio='none'%3E%3Cpath d='M3 9 C17 4 29 6 43 6 C60 6 72 2 97 5' fill='none' stroke='%238b371e' stroke-width='2.1' stroke-linecap='round'/%3E%3Cpath d='M8 11 C29 8 57 10 92 7' fill='none' stroke='%238b371e' stroke-width='1.2' stroke-linecap='round' opacity='.45'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
+}
+
 .field-guide-rail section {
   border-bottom: 1px solid rgba(78, 65, 44, 0.27);
   padding-bottom: 22px;
@@ -742,7 +779,7 @@ button:hover {
 
 .new-bird-badge {
   position: absolute;
-  top: -18px;
+  bottom: 4px;
   left: 50%;
   z-index: 10002;
   display: inline-flex;
@@ -1080,14 +1117,31 @@ button:hover {
 
 .bird-modal-meta {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 10px;
+  grid-template-columns: minmax(68px, max-content) minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 8px;
+  align-items: baseline;
+  max-width: 420px;
   margin: 0;
 }
 
+.bird-modal-meta dt {
+  justify-self: end;
+  text-align: right;
+}
+
 .bird-modal-meta dd {
-  margin: 0 18px 0 0;
+  margin: 0;
   color: #3f3b35;
+  font-size: 13px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.bird-modal-meta dd b {
+  color: inherit;
+  font-size: inherit;
+  letter-spacing: 0;
   text-transform: none;
 }
 
@@ -1115,7 +1169,7 @@ button:hover {
 
 .bird-modal-recording {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 60px;
+  grid-template-columns: 34px minmax(0, 1fr) 56px 44px;
   align-items: center;
   gap: 12px;
   min-height: 72px;
@@ -1176,6 +1230,22 @@ button:hover {
 .bird-modal-recording strong {
   color: #8a8378;
   text-align: right;
+}
+
+.bird-modal-download {
+  color: #8b371e;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-align: right;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.bird-modal-download:hover {
+  color: #5f2414;
+  font-weight: inherit;
+  text-decoration: underline;
 }
 
 .bird-modal-empty {
@@ -1649,6 +1719,14 @@ button:hover {
   }
   .bird-modal-stats {
     grid-template-columns: 1fr;
+  }
+  .bird-modal-recording {
+    grid-template-columns: 34px minmax(0, 1fr) 48px;
+    gap: 10px;
+  }
+  .bird-modal-download {
+    grid-column: 3;
+    margin-top: -12px;
   }
 }
 

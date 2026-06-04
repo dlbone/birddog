@@ -307,6 +307,8 @@ Description=Trigger birddog collage rebuilds from detection DB writes
 [Path]
 PathModified=$COLLAGE_DB_PATH
 PathChanged=$COLLAGE_DB_PATH
+PathModified=$COLLAGE_DB_PATH-wal
+PathChanged=$COLLAGE_DB_PATH-wal
 Unit=birdnet_collage_debounce.service
 TriggerLimitIntervalSec=1min
 TriggerLimitBurst=20

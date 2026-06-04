@@ -75,6 +75,12 @@ def read_json(path, default):
         return default
 
 
+def db_data_mtime():
+    paths = (DB_PATH, f"{DB_PATH}-wal", f"{DB_PATH}-shm")
+    mtimes = [os.path.getmtime(path) for path in paths if os.path.exists(path)]
+    return max(mtimes) if mtimes else 0
+
+
 def load_labels():
     global _LABELS_CACHE
     if _LABELS_CACHE is not None:
@@ -749,7 +755,7 @@ def index_is_current(hours, args):
         return False
     if os.path.getmtime(__file__) > os.path.getmtime(index_path):
         return False
-    if os.path.exists(DB_PATH) and os.path.getmtime(DB_PATH) > os.path.getmtime(index_path):
+    if db_data_mtime() > os.path.getmtime(index_path):
         return False
     payload = read_json(index_path, {})
     if payload.get("index_schema") != INDEX_SCHEMA_VERSION:

@@ -11,6 +11,7 @@ if (session_status() === PHP_SESSION_ACTIVE) {
   session_write_close();
 }
 $hours = isset($_GET['hours']) ? intval($_GET['hours']) : -1;
+$new_mode = isset($_GET['new']) && strval($_GET['new']) === '1';
 $range_files = [
   1 => 'index-1h.json',
   12 => 'index-12h.json',
@@ -22,6 +23,9 @@ $range_files = [
 
 if (!array_key_exists($hours, $range_files)) {
   $hours = -1;
+}
+if ($new_mode) {
+  $hours = 24;
 }
 
 $index_path = $home . '/BirdSongs/Extracted/collage/' . $range_files[$hours];
@@ -42,17 +46,28 @@ function collage_index_is_stale($index_path, $db_path, $script_path, $ttl, $db_g
   if (!file_exists($index_path)) return true;
   $index_mtime = filemtime($index_path);
   if (file_exists($script_path) && filemtime($script_path) > $index_mtime) return true;
-  if (file_exists($db_path)) {
-    $db_mtime = filemtime($db_path);
+  $db_mtime = collage_db_mtime($db_path);
+  if ($db_mtime > 0) {
     return $db_mtime > $index_mtime && time() - $db_mtime > $db_grace;
   }
   return time() - $index_mtime > $ttl;
 }
 
+function collage_db_mtime($db_path) {
+  $mtime = 0;
+  foreach ([$db_path, $db_path . '-wal', $db_path . '-shm'] as $path) {
+    clearstatcache(true, $path);
+    if (file_exists($path)) {
+      $mtime = max($mtime, filemtime($path));
+    }
+  }
+  return $mtime;
+}
+
 function collage_any_range_old($range_files, $home, $db_path, $script_path, $ttl, $db_grace) {
   $base = $home . '/BirdSongs/Extracted/collage/';
-  $has_db = file_exists($db_path);
-  $db_mtime = $has_db ? filemtime($db_path) : 0;
+  $db_mtime = collage_db_mtime($db_path);
+  $has_db = $db_mtime > 0;
   $script_mtime = file_exists($script_path) ? filemtime($script_path) : 0;
   $oldest = PHP_INT_MAX;
   foreach ($range_files as $file) {
@@ -160,6 +175,29 @@ function collage_payload_schema_old($payload, $schema) {
   return !is_array($payload) || intval($payload['index_schema'] ?? 0) !== intval($schema);
 }
 
+function collage_payload_signature($species) {
+  $json = json_encode(array_values($species), JSON_UNESCAPED_SLASHES);
+  return sha1($json === false ? '' : $json);
+}
+
+function collage_filter_new_payload($payload) {
+  if (!is_array($payload)) return $payload;
+  $species = array_values(array_filter($payload['species'] ?? [], function($bird) {
+    return !empty($bird['is_new_bird']);
+  }));
+  $payload['species'] = $species;
+  $payload['species_count'] = count($species);
+  $payload['payload_sig'] = collage_payload_signature($species);
+  $payload['hours'] = 24;
+  $payload['view'] = 'new';
+  return $payload;
+}
+
+function collage_encode_payload($payload) {
+  $json = json_encode($payload, JSON_UNESCAPED_SLASHES);
+  return ($json === false ? '{"generated_at":null,"species_count":0,"species":[]}' : $json) . "\n";
+}
+
 function collage_needs_generated_images($payload) {
   if (empty($payload['species']) || !is_array($payload['species'])) return false;
   foreach ($payload['species'] as $bird) {
@@ -226,6 +264,10 @@ if (file_exists($index_path)) {
   } else if ($raw_payload === null) {
     $raw_payload = file_get_contents($index_path);
   }
+  if ($new_mode) {
+    $payload = collage_filter_new_payload($payload);
+    $raw_payload = collage_encode_payload($payload);
+  }
   $client_sig = isset($_GET['sig']) ? strval($_GET['sig']) : '';
   $payload_sig = isset($payload['payload_sig']) ? strval($payload['payload_sig']) : '';
   if ($client_sig !== '' && $payload_sig !== '' && hash_equals($payload_sig, $client_sig)) {
@@ -239,6 +281,7 @@ if (file_exists($index_path)) {
 echo json_encode([
   'generated_at' => null,
   'hours' => $hours,
+  'view' => $new_mode ? 'new' : 'recent',
   'species_count' => 0,
   'species' => [],
 ]);

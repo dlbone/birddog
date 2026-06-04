@@ -15,9 +15,13 @@ $range_options = [
   ['label' => 'all', 'hours' => 1000000, 'file' => 'index-all.json'],
 ];
 $requested_hours = isset($_GET['hours']) ? intval($_GET['hours']) : -1;
+$new_mode = isset($_GET['new']) && strval($_GET['new']) === '1';
 $allowed_hours = array_map(function($opt) { return $opt['hours']; }, $range_options);
 if (!in_array($requested_hours, $allowed_hours, true)) {
   $requested_hours = -1;
+}
+if ($new_mode) {
+  $requested_hours = 24;
 }
 $active_range = $range_options[2];
 foreach ($range_options as $option) {
@@ -41,11 +45,22 @@ function collage_index_needs_data_refresh($index_path, $db_path, $script_path, $
   if (!file_exists($index_path)) return true;
   $index_mtime = filemtime($index_path);
   if (file_exists($script_path) && filemtime($script_path) > $index_mtime) return true;
-  if (file_exists($db_path)) {
-    $db_mtime = filemtime($db_path);
+  $db_mtime = collage_db_mtime($db_path);
+  if ($db_mtime > 0) {
     return $db_mtime > $index_mtime && time() - $db_mtime > $db_grace;
   }
   return false;
+}
+
+function collage_db_mtime($db_path) {
+  $mtime = 0;
+  foreach ([$db_path, $db_path . '-wal', $db_path . '-shm'] as $path) {
+    clearstatcache(true, $path);
+    if (file_exists($path)) {
+      $mtime = max($mtime, filemtime($path));
+    }
+  }
+  return $mtime;
 }
 
 function collage_builder_locked($lock_path) {
@@ -88,6 +103,24 @@ function collage_payload_schema_old($payload, $schema) {
   return !is_array($payload) || intval($payload['index_schema'] ?? 0) !== intval($schema);
 }
 
+function collage_payload_signature($species) {
+  $json = json_encode(array_values($species), JSON_UNESCAPED_SLASHES);
+  return sha1($json === false ? '' : $json);
+}
+
+function collage_filter_new_payload($payload) {
+  if (!is_array($payload)) return $payload;
+  $species = array_values(array_filter($payload['species'] ?? [], function($bird) {
+    return !empty($bird['is_new_bird']);
+  }));
+  $payload['species'] = $species;
+  $payload['species_count'] = count($species);
+  $payload['payload_sig'] = collage_payload_signature($species);
+  $payload['hours'] = 24;
+  $payload['view'] = 'new';
+  return $payload;
+}
+
 if (collage_index_needs_data_refresh($index_path, $db_path, $script_path, $collage_db_refresh_grace)) {
   run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user, ' --if-stale');
 }
@@ -99,6 +132,9 @@ if (file_exists($index_path)) {
     run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user);
     $payload = json_decode(file_get_contents($index_path), true);
   }
+}
+if ($new_mode) {
+  $payload = collage_filter_new_payload($payload);
 }
 $birds = $payload['species'] ?? [];
 
@@ -123,7 +159,8 @@ function collage_window_label($hours) {
   return 'all time';
 }
 
-function collage_subtitle($hours) {
+function collage_subtitle($hours, $new_mode = false) {
+  if ($new_mode) return 'A record of birds first heard in the last 24 hours.';
   if ($hours === -1) return 'A record of birds detected by ear since midnight.';
   if ($hours === 1000000) return 'A record of birds detected by ear across all time.';
   return 'A record of birds detected by ear in the ' . collage_window_label($hours) . '.';
@@ -150,6 +187,9 @@ function collage_daily_note() {
 $daily_note = collage_daily_note();
 $bird_count = count($birds);
 $recent_birds = array_slice($birds, 0, 5);
+$rail_heading = $new_mode ? 'New birds' : 'Recently heard';
+$empty_message = $new_mode ? 'No new birds in the last 24 hours.' : 'No detections yet. The plate will fill in as BirdNET hears species.';
+$page_title = $new_mode ? 'New Visitors' : 'Recent Visitors';
 $initial_payload = $payload ?: ['generated_at' => null, 'species' => []];
 $json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 $initial_payload_json = json_encode($initial_payload, $json_flags);
@@ -157,7 +197,8 @@ if ($initial_payload_json === false) {
   $initial_payload_json = '{"generated_at":null,"species":[]}';
 }
 $index_rel_json = json_encode($index_rel, $json_flags);
-$data_url_json = json_encode('/scripts/collage_index.php?hours=' . intval($requested_hours), $json_flags);
+$data_url = '/scripts/collage_index.php?hours=' . intval($requested_hours) . ($new_mode ? '&new=1' : '');
+$data_url_json = json_encode($data_url, $json_flags);
 $silhouette_pack_path = $home . '/BirdNET-Pi/homepage/static/silhouette-pack.js';
 $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silhouette_pack_path) : time();
 ?>
@@ -166,8 +207,12 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     <div class="field-guide-brand">
       <span><?php echo htmlspecialchars($collage_site_name); ?> birds</span>
     </div>
+    <nav class="field-mode-tabs" aria-label="Bird view">
+      <a<?php if (!$new_mode) echo ' class="active"'; ?> href="views.php?view=Collage&amp;hours=<?php echo intval($requested_hours); ?>">Recent</a>
+      <a<?php if ($new_mode) echo ' class="active"'; ?> href="views.php?view=Collage&amp;hours=24&amp;new=1">New</a>
+    </nav>
     <section class="field-recent">
-      <div class="field-section-head"><h3>Recently heard</h3><span><?php echo htmlspecialchars($active_range['label']); ?></span></div>
+      <div class="field-section-head"><h3><?php echo htmlspecialchars($rail_heading); ?></h3><span><?php echo htmlspecialchars($new_mode ? '24h' : $active_range['label']); ?></span></div>
       <ol class="field-recent-list">
         <?php foreach ($recent_birds as $bird) {
           $name = htmlspecialchars($bird['com_name']);
@@ -180,6 +225,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
       <h3>Metadata</h3>
       <p><span>Date</span><?php echo htmlspecialchars(date('M j, Y')); ?></p>
       <p><span>Window</span><?php echo htmlspecialchars(collage_window_label($requested_hours)); ?></p>
+      <p><span>Mode</span><?php echo htmlspecialchars($new_mode ? 'New' : 'Recent'); ?></p>
       <p><span>Source</span>Auto-detected</p>
     </section>
     <p class="field-script-note"><?php echo htmlspecialchars($daily_note[0]); ?><br><?php echo htmlspecialchars($daily_note[1]); ?></p>
@@ -192,10 +238,10 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
       </div>
     </div>
     <header class="collage-header">
-      <h2>Recent Visitors</h2>
-      <p class="field-guide-subtitle"><?php echo htmlspecialchars(collage_subtitle($requested_hours)); ?></p>
+      <h2><?php echo htmlspecialchars($page_title); ?></h2>
+      <p class="field-guide-subtitle"><?php echo htmlspecialchars(collage_subtitle($requested_hours, $new_mode)); ?></p>
     </header>
-    <div class="collage-empty" <?php if ($bird_count > 0) echo 'hidden'; ?>>No detections yet. The plate will fill in as BirdNET hears species.</div>
+    <div class="collage-empty" <?php if ($bird_count > 0) echo 'hidden'; ?>><?php echo htmlspecialchars($empty_message); ?></div>
     <div class="bird-collage <?php echo collage_count_class($bird_count); ?>" data-layout="pending" aria-label="Recently heard birds collage" <?php if ($bird_count === 0) echo 'hidden'; ?>>
       <?php foreach ($birds as $idx => $bird) {
           $name = htmlspecialchars($bird['com_name']);
@@ -203,7 +249,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           $count = intval($bird['recent_count']);
           $is_new_bird = !empty($bird['is_new_bird']);
           $bird_classes = 'collage-bird' . ($is_new_bird ? ' is-new-bird' : '');
-          $new_badge = $is_new_bird ? '<span class="new-bird-badge">New</span>' : '';
+          $new_badge = (!$new_mode && $is_new_bird) ? '<span class="new-bird-badge">New</span>' : '';
           if (!empty($bird['has_image'])) {
             $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
             $src = htmlspecialchars(collage_asset_url($bird['image'], $version));
@@ -253,6 +299,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   const initialIndex = <?php echo $initial_payload_json; ?>;
   const indexUrl = <?php echo $index_rel_json; ?>;
   const dataUrl = <?php echo $data_url_json; ?>;
+  const isNewMode = <?php echo $new_mode ? 'true' : 'false'; ?>;
   const collage = document.querySelector('.bird-collage');
   const empty = document.querySelector('.collage-empty');
   const recentList = document.querySelector('.field-recent-list');
@@ -361,7 +408,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
     const isNew = bird.is_new_bird ? ' is-new-bird' : '';
-    const badge = bird.is_new_bird ? '<span class="new-bird-badge">New</span>' : '';
+    const badge = !isNewMode && bird.is_new_bird ? '<span class="new-bird-badge">New</span>' : '';
     if (bird.has_image) {
       const src = escapeHtml(assetUrl(bird.image, bird.image_version));
       return `<figure class="collage-bird${isNew}" data-bird-idx="${idx}" tabindex="0">${badge}<img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
@@ -468,6 +515,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
         <canvas class="bird-modal-viz" width="320" height="34" data-audio="${escapeHtml(audioPath)}" aria-hidden="true"></canvas>
       </div>
       <strong>${confidence}%</strong>
+      <a class="bird-modal-download" href="${escapeHtml(audioPath)}" download>mp3</a>
     </div>`;
   }
 
