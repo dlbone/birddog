@@ -16,12 +16,17 @@ $range_options = [
 ];
 $requested_hours = isset($_GET['hours']) ? intval($_GET['hours']) : -1;
 $new_mode = isset($_GET['new']) && strval($_GET['new']) === '1';
+$catalog_mode = isset($_GET['catalog']) && strval($_GET['catalog']) === '1';
 $allowed_hours = array_map(function($opt) { return $opt['hours']; }, $range_options);
 if (!in_array($requested_hours, $allowed_hours, true)) {
   $requested_hours = -1;
 }
 if ($new_mode) {
   $requested_hours = 24;
+}
+if ($catalog_mode) {
+  $requested_hours = 1000000;
+  $new_mode = false;
 }
 $active_range = $range_options[2];
 foreach ($range_options as $option) {
@@ -30,10 +35,10 @@ foreach ($range_options as $option) {
     break;
   }
 }
-$index_rel = 'collage/' . $active_range['file'];
+$index_rel = 'collage/' . ($catalog_mode ? 'index-catalog.json' : $active_range['file']);
 $index_path = $home . '/BirdSongs/Extracted/' . $index_rel;
 $db_path = $home . '/BirdNET-Pi/scripts/birds.db';
-$lock_path = $home . '/BirdSongs/Extracted/collage/build-' . $requested_hours . '.lock';
+$lock_path = $home . '/BirdSongs/Extracted/collage/build-' . ($catalog_mode ? 'catalog' : $requested_hours) . '.lock';
 $collage_index_schema = 4;
 $collage_db_refresh_grace = 45;
 
@@ -68,7 +73,7 @@ function collage_builder_locked($lock_path) {
   return file_exists($lock_path) && time() - filemtime($lock_path) < 180;
 }
 
-function run_initial_collage_index($home, $script_path, $hours, $lock_path, $builder_user, $extra_args = '') {
+function run_initial_collage_index($home, $script_path, $hours, $lock_path, $builder_user, $extra_args = '', $catalog = false) {
   if (collage_builder_locked($lock_path)) return false;
   $lock_handle = fopen($lock_path, 'c');
   if (!$lock_handle || !flock($lock_handle, LOCK_EX | LOCK_NB)) {
@@ -80,7 +85,9 @@ function run_initial_collage_index($home, $script_path, $hours, $lock_path, $bui
     . escapeshellarg($home . '/BirdNET-Pi/birdnet/bin/python3') . ' '
     . escapeshellarg($script_path)
     . ' --hours ' . intval($hours)
-    . ' --limit 28 --skip-enrich'
+    . ' --limit ' . ($catalog ? '0' : '28')
+    . ($catalog ? ' --catalog' : '')
+    . ' --skip-enrich'
     . $extra_args
     . ' > /dev/null 2>&1');
   flock($lock_handle, LOCK_UN);
@@ -122,14 +129,14 @@ function collage_filter_new_payload($payload) {
 }
 
 if (collage_index_needs_data_refresh($index_path, $db_path, $script_path, $collage_db_refresh_grace)) {
-  run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user, ' --if-stale');
+  run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user, ' --if-stale', $catalog_mode);
 }
 
 $payload = null;
 if (file_exists($index_path)) {
   $payload = json_decode(file_get_contents($index_path), true);
   if (collage_payload_schema_old($payload, $collage_index_schema) || collage_has_cached_missing_images($payload, $home)) {
-    run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user);
+    run_initial_collage_index($home, $script_path, $requested_hours, $lock_path, $collage_user, '', $catalog_mode);
     $payload = json_decode(file_get_contents($index_path), true);
   }
 }
@@ -159,7 +166,8 @@ function collage_window_label($hours) {
   return 'all time';
 }
 
-function collage_subtitle($hours, $new_mode = false) {
+function collage_subtitle($hours, $new_mode = false, $catalog_mode = false) {
+  if ($catalog_mode) return 'An archive of every bird detected by your BirdDog.';
   if ($new_mode) return 'A record of birds first heard in the last 24 hours.';
   if ($hours === -1) return 'A record of birds detected by ear since midnight.';
   if ($hours === 1000000) return 'A record of birds detected by ear across all time.';
@@ -184,32 +192,69 @@ function collage_daily_note() {
   ];
   return $notes[intval(date('z')) % count($notes)];
 }
+
+function catalog_rarity_slug($bird) {
+  $rarity = strtolower(trim(strval($bird['rarity'] ?? '')));
+  if (in_array($rarity, ['common', 'regular', 'occasional', 'new'], true)) {
+    return $rarity;
+  }
+  $total_count = intval($bird['total_count'] ?? $bird['recent_count'] ?? 0);
+  if ($total_count >= 25) return 'common';
+  if ($total_count >= 8) return 'regular';
+  if ($total_count >= 3) return 'occasional';
+  return 'new';
+}
+
+function catalog_rarity_label($bird) {
+  $slug = catalog_rarity_slug($bird);
+  if ($slug === 'new') return 'Rare';
+  return ucfirst($slug);
+}
+
+function catalog_search_text($bird) {
+  return strtolower(implode(' ', [
+    $bird['com_name'] ?? '',
+    $bird['sci_name'] ?? '',
+    $bird['genus'] ?? '',
+    catalog_rarity_label($bird),
+  ]));
+}
+
 $daily_note = collage_daily_note();
 $bird_count = count($birds);
 $recent_birds = array_slice($birds, 0, 5);
-$rail_heading = $new_mode ? 'New birds' : 'Recently heard';
-$empty_message = $new_mode ? 'No new birds in the last 24 hours.' : 'No detections yet. The plate will fill in as BirdNET hears species.';
-$page_title = $new_mode ? 'New Visitors' : 'Recent Visitors';
+$rail_heading = $catalog_mode ? 'Archive leaders' : ($new_mode ? 'New birds' : 'Recently heard');
+$empty_message = $catalog_mode ? 'No catalog entries yet. Birds will appear after detections are indexed.' : ($new_mode ? 'No new birds in the last 24 hours.' : 'No detections yet. The plate will fill in as BirdNET hears species.');
+$page_title = $catalog_mode ? 'Bird Catalog' : ($new_mode ? 'New Visitors' : 'Recent Visitors');
 $initial_payload = $payload ?: ['generated_at' => null, 'species' => []];
+$catalog_categories = [
+  ['slug' => 'all', 'label' => 'All'],
+  ['slug' => 'today', 'label' => 'Seen Today'],
+  ['slug' => 'common', 'label' => 'Common'],
+  ['slug' => 'regular', 'label' => 'Regular'],
+  ['slug' => 'occasional', 'label' => 'Occasional'],
+  ['slug' => 'new', 'label' => 'Rare'],
+];
 $json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 $initial_payload_json = json_encode($initial_payload, $json_flags);
 if ($initial_payload_json === false) {
   $initial_payload_json = '{"generated_at":null,"species":[]}';
 }
 $index_rel_json = json_encode($index_rel, $json_flags);
-$data_url = '/scripts/collage_index.php?hours=' . intval($requested_hours) . ($new_mode ? '&new=1' : '');
+$data_url = '/scripts/collage_index.php?hours=' . intval($requested_hours) . ($new_mode ? '&new=1' : '') . ($catalog_mode ? '&catalog=1' : '');
 $data_url_json = json_encode($data_url, $json_flags);
 $silhouette_pack_path = $home . '/BirdNET-Pi/homepage/static/silhouette-pack.js';
 $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silhouette_pack_path) : time();
 ?>
-<div class="collage-page">
+<div class="collage-page<?php if ($catalog_mode) echo ' catalog-mode'; ?>">
   <aside class="field-guide-rail" aria-label="Observation controls and summary">
     <div class="field-guide-brand">
       <span><?php echo htmlspecialchars($collage_site_name); ?> birds</span>
     </div>
     <nav class="field-mode-tabs" aria-label="Bird view">
-      <a<?php if (!$new_mode) echo ' class="active"'; ?> href="views.php?view=Collage&amp;hours=<?php echo intval($requested_hours); ?>">Recent</a>
+      <a<?php if (!$new_mode && !$catalog_mode) echo ' class="active"'; ?> href="views.php?view=Collage&amp;hours=<?php echo intval($requested_hours); ?>">Recent</a>
       <a<?php if ($new_mode) echo ' class="active"'; ?> href="views.php?view=Collage&amp;hours=24&amp;new=1">New</a>
+      <a<?php if ($catalog_mode) echo ' class="active"'; ?> href="views.php?view=Collage&amp;catalog=1">Catalog</a>
     </nav>
     <section class="field-recent">
       <div class="field-section-head"><h3><?php echo htmlspecialchars($rail_heading); ?></h3><span><?php echo htmlspecialchars($new_mode ? '24h' : $active_range['label']); ?></span></div>
@@ -225,7 +270,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
       <h3>Metadata</h3>
       <p><span>Date</span><?php echo htmlspecialchars(date('M j, Y')); ?></p>
       <p><span>Window</span><?php echo htmlspecialchars(collage_window_label($requested_hours)); ?></p>
-      <p><span>Mode</span><?php echo htmlspecialchars($new_mode ? 'New' : 'Recent'); ?></p>
+      <p><span>Mode</span><?php echo htmlspecialchars($catalog_mode ? 'Catalog' : ($new_mode ? 'New' : 'Recent')); ?></p>
       <p><span>Source</span>Auto-detected</p>
     </section>
     <p class="field-script-note"><?php echo htmlspecialchars($daily_note[0]); ?><br><?php echo htmlspecialchars($daily_note[1]); ?></p>
@@ -239,39 +284,106 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     </div>
     <header class="collage-header">
       <h2><?php echo htmlspecialchars($page_title); ?></h2>
-      <p class="field-guide-subtitle"><?php echo htmlspecialchars(collage_subtitle($requested_hours, $new_mode)); ?></p>
+      <p class="field-guide-subtitle"><?php echo htmlspecialchars(collage_subtitle($requested_hours, $new_mode, $catalog_mode)); ?></p>
     </header>
-    <div class="collage-empty" <?php if ($bird_count > 0) echo 'hidden'; ?>><?php echo htmlspecialchars($empty_message); ?></div>
-    <div class="bird-collage <?php echo collage_count_class($bird_count); ?>" data-layout="pending" aria-label="Recently heard birds collage" <?php if ($bird_count === 0) echo 'hidden'; ?>>
-      <?php foreach ($birds as $idx => $bird) {
-          $name = htmlspecialchars($bird['com_name']);
-          $sci = htmlspecialchars($bird['sci_name']);
-          $count = intval($bird['recent_count']);
-          $is_new_bird = !empty($bird['is_new_bird']);
-          $bird_classes = 'collage-bird' . ($is_new_bird ? ' is-new-bird' : '');
-          $new_badge = (!$new_mode && $is_new_bird) ? '<span class="new-bird-badge">New</span>' : '';
+    <?php if ($catalog_mode) { ?>
+      <section class="catalog-controls" aria-label="Catalog controls">
+        <label class="catalog-search">
+          <span>Search</span>
+          <input class="catalog-search-input" type="search" placeholder="Search species..." autocomplete="off">
+        </label>
+        <div class="catalog-filters" role="group" aria-label="Catalog categories">
+          <?php foreach ($catalog_categories as $category) {
+            echo '<button type="button" data-catalog-filter="' . htmlspecialchars($category['slug']) . '"' . ($category['slug'] === 'all' ? ' class="active"' : '') . '>' . htmlspecialchars($category['label']) . '</button>';
+          } ?>
+        </div>
+        <label class="catalog-sort">
+          <span>Sort</span>
+          <select class="catalog-sort-select">
+            <option value="az">A-Z</option>
+            <option value="detections">Detections</option>
+            <option value="recent">Last heard</option>
+            <option value="first">First heard</option>
+          </select>
+        </label>
+      </section>
+      <div class="collage-empty catalog-empty" <?php if ($bird_count > 0) echo 'hidden'; ?>><?php echo htmlspecialchars($empty_message); ?></div>
+      <div class="bird-catalog" aria-label="Bird catalog" <?php if ($bird_count === 0) echo 'hidden'; ?>>
+        <?php foreach ($birds as $idx => $bird) {
+          $name = htmlspecialchars($bird['com_name'] ?? 'Unknown bird');
+          $sci = htmlspecialchars($bird['sci_name'] ?? '');
+          $total = intval($bird['total_count'] ?? $bird['recent_count'] ?? 0);
+          $today = intval($bird['today_count'] ?? 0);
+          $sci_name_text = strval($bird['sci_name'] ?? '');
+          $genus_text = strval($bird['genus'] ?? '');
+          if ($genus_text === '' && $sci_name_text !== '') {
+            $genus_text = strtok($sci_name_text, ' ');
+          }
+          $genus = htmlspecialchars($genus_text);
+          $category_slug = htmlspecialchars(catalog_rarity_slug($bird));
+          $category_label = htmlspecialchars(catalog_rarity_label($bird));
+          $search_text = htmlspecialchars(catalog_search_text($bird));
+          $last_heard = htmlspecialchars($bird['last_heard'] ?? '');
+          $first_heard = htmlspecialchars($bird['first_heard'] ?? '');
+          $plate = str_pad(strval($idx + 1), 3, '0', STR_PAD_LEFT);
+          echo '<article class="catalog-card" data-bird-idx="' . intval($idx) . '" data-catalog-category="' . $category_slug . '" data-search-text="' . $search_text . '" tabindex="0">';
+          echo '<div class="catalog-card-top"><span>Plate ' . htmlspecialchars($plate) . '</span><b class="catalog-card-tag">' . $category_label . '</b></div>';
+          echo '<div class="catalog-card-art">';
           if (!empty($bird['has_image'])) {
             $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
             $src = htmlspecialchars(collage_asset_url($bird['image'], $version));
-            echo "<figure class=\"$bird_classes\" data-bird-idx=\"$idx\" tabindex=\"0\">$new_badge<img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
+            echo '<img src="' . $src . '" alt="' . $name . '">';
           } else {
-            $initials = htmlspecialchars(bird_initials($bird['com_name']));
-            echo "<figure class=\"$bird_classes collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\">$new_badge<div>$initials</div><figcaption><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
+            echo '<div class="catalog-card-placeholder">' . htmlspecialchars(bird_initials($bird['com_name'] ?? 'Bird')) . '</div>';
           }
+          echo '</div>';
+          echo '<div class="catalog-card-copy"><h3>' . $name . '</h3><i>' . $sci . '</i><dl>';
+          echo '<dt>Genus</dt><dd>' . $genus . '</dd>';
+          echo '<dt>Detections</dt><dd>' . number_format($total) . '</dd>';
+          echo '<dt>Today</dt><dd>' . number_format($today) . '</dd>';
+          echo '<dt>First heard</dt><dd><b class="js-relative-date" data-date-value="' . $first_heard . '">' . ($first_heard ?: 'unknown') . '</b></dd>';
+          echo '<dt>Last heard</dt><dd><b class="js-relative-date" data-date-value="' . $last_heard . '">' . ($last_heard ?: 'unknown') . '</b></dd>';
+          echo '</dl></div></article>';
         } ?>
-    </div>
-    <nav class="collage-range" aria-label="Observation window">
-      <?php foreach ($range_options as $option) {
-        $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
-        $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
-        echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
-      } ?>
-    </nav>
-    <footer class="field-guide-footer">
-      <div><b>Notes</b><span>Birds are listed in order of recent detections.</span></div>
-      <div><b>Reading the plate</b><span>Larger portraits mark the most frequent visitors; smaller studies are passing notes from the microphone.</span></div>
-      <div><b>Recorded by</b><span>BirdDog Audio Recorder</span></div>
-    </footer>
+      </div>
+      <footer class="field-guide-footer catalog-footer">
+        <div><b>Viewing</b><span><span class="catalog-visible-count"><?php echo intval($bird_count); ?></span> of <span class="catalog-total-count"><?php echo intval($bird_count); ?></span> species</span></div>
+        <div><b>Categories</b><span>Grouped by local detection frequency and whether the species was heard today.</span></div>
+        <div><b>Recorded by</b><span>BirdDog Audio Recorder</span></div>
+      </footer>
+    <?php } else { ?>
+      <div class="collage-empty" <?php if ($bird_count > 0) echo 'hidden'; ?>><?php echo htmlspecialchars($empty_message); ?></div>
+      <div class="bird-collage <?php echo collage_count_class($bird_count); ?>" data-layout="pending" aria-label="Recently heard birds collage" <?php if ($bird_count === 0) echo 'hidden'; ?>>
+        <?php foreach ($birds as $idx => $bird) {
+            $name = htmlspecialchars($bird['com_name']);
+            $sci = htmlspecialchars($bird['sci_name']);
+            $count = intval($bird['recent_count']);
+            $is_new_bird = !empty($bird['is_new_bird']);
+            $bird_classes = 'collage-bird' . ($is_new_bird ? ' is-new-bird' : '');
+            $new_badge = (!$new_mode && $is_new_bird) ? '<span class="new-bird-badge">New</span>' : '';
+            if (!empty($bird['has_image'])) {
+              $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
+              $src = htmlspecialchars(collage_asset_url($bird['image'], $version));
+              echo "<figure class=\"$bird_classes\" data-bird-idx=\"$idx\" tabindex=\"0\">$new_badge<img src=\"$src\" alt=\"$name\"><figcaption><b>$name</b><i>$sci</i><span>$count heard</span></figcaption></figure>";
+            } else {
+              $initials = htmlspecialchars(bird_initials($bird['com_name']));
+              echo "<figure class=\"$bird_classes collage-placeholder\" data-bird-idx=\"$idx\" tabindex=\"0\">$new_badge<div>$initials</div><figcaption><b>$name</b><i>$sci</i><span>image queued</span></figcaption></figure>";
+            }
+          } ?>
+      </div>
+      <nav class="collage-range" aria-label="Observation window">
+        <?php foreach ($range_options as $option) {
+          $href = 'views.php?view=Collage&hours=' . intval($option['hours']);
+          $active = $option['hours'] === $requested_hours ? ' class="active"' : '';
+          echo '<a' . $active . ' href="' . htmlspecialchars($href) . '">' . htmlspecialchars($option['label']) . '</a>';
+        } ?>
+      </nav>
+      <footer class="field-guide-footer">
+        <div><b>Notes</b><span>Birds are listed in order of recent detections.</span></div>
+        <div><b>Reading the plate</b><span>Larger portraits mark the most frequent visitors; smaller studies are passing notes from the microphone.</span></div>
+        <div><b>Recorded by</b><span>BirdDog Audio Recorder</span></div>
+      </footer>
+    <?php } ?>
   </main>
 </div>
 <div class="bird-modal" hidden>
@@ -300,9 +412,16 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   const indexUrl = <?php echo $index_rel_json; ?>;
   const dataUrl = <?php echo $data_url_json; ?>;
   const isNewMode = <?php echo $new_mode ? 'true' : 'false'; ?>;
+  const isCatalogMode = <?php echo $catalog_mode ? 'true' : 'false'; ?>;
   const collage = document.querySelector('.bird-collage');
+  const catalog = document.querySelector('.bird-catalog');
   const empty = document.querySelector('.collage-empty');
   const recentList = document.querySelector('.field-recent-list');
+  const catalogSearch = document.querySelector('.catalog-search-input');
+  const catalogSort = document.querySelector('.catalog-sort-select');
+  const catalogFilters = document.querySelector('.catalog-filters');
+  const catalogVisibleCount = document.querySelector('.catalog-visible-count');
+  const catalogTotalCount = document.querySelector('.catalog-total-count');
   const modal = document.querySelector('.bird-modal');
   const modalArt = modal.querySelector('.bird-modal-art');
   const modalTitle = modal.querySelector('#bird-modal-title');
@@ -330,6 +449,10 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   let layoutGeneration = 0;
   let lastPackKey = '';
   let collageNodes = null;
+  let catalogFilter = 'all';
+  let catalogSearchText = '';
+  let catalogSortMode = 'az';
+  const emptyDefaultText = empty ? empty.textContent : '';
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
 
   function escapeHtml(value) {
@@ -494,6 +617,118 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
       if (recording.date) values.push(`${recording.date} ${recording.time || '00:00:00'}`);
     });
     return earliestTimestamp(values) || (bird && bird.last_heard) || '';
+  }
+
+  function catalogRaritySlug(bird) {
+    const rarity = String((bird && bird.rarity) || '').trim().toLowerCase();
+    if (['common', 'regular', 'occasional', 'new'].includes(rarity)) return rarity;
+    const total = Number((bird && (bird.total_count || bird.recent_count)) || 0);
+    if (total >= 25) return 'common';
+    if (total >= 8) return 'regular';
+    if (total >= 3) return 'occasional';
+    return 'new';
+  }
+
+  function catalogRarityLabel(bird) {
+    const rarity = catalogRaritySlug(bird);
+    if (rarity === 'new') return 'Rare';
+    return rarity.charAt(0).toUpperCase() + rarity.slice(1);
+  }
+
+  function catalogSearchValue(bird) {
+    return [
+      bird.com_name || '',
+      bird.sci_name || '',
+      bird.genus || '',
+      catalogRarityLabel(bird)
+    ].join(' ').toLowerCase();
+  }
+
+  function catalogDateTime(value) {
+    const parsed = parseBirdTimestamp(value);
+    return parsed ? parsed.getTime() : 0;
+  }
+
+  function catalogFilterMatches(bird) {
+    if (catalogFilter === 'all') return true;
+    if (catalogFilter === 'today') return Number(bird.today_count || 0) > 0;
+    return catalogRaritySlug(bird) === catalogFilter;
+  }
+
+  function catalogSearchMatches(bird) {
+    if (!catalogSearchText) return true;
+    return catalogSearchValue(bird).includes(catalogSearchText);
+  }
+
+  function catalogCompareNames(a, b) {
+    return String(a.bird.com_name || '').localeCompare(String(b.bird.com_name || ''));
+  }
+
+  function sortCatalogEntries(entries) {
+    const sorted = entries.slice();
+    sorted.sort(function(a, b) {
+      if (catalogSortMode === 'detections') {
+        return Number(b.bird.total_count || b.bird.recent_count || 0) - Number(a.bird.total_count || a.bird.recent_count || 0) || catalogCompareNames(a, b);
+      }
+      if (catalogSortMode === 'recent') {
+        return catalogDateTime(b.bird.last_heard) - catalogDateTime(a.bird.last_heard) || catalogCompareNames(a, b);
+      }
+      if (catalogSortMode === 'first') {
+        return catalogDateTime(a.bird.first_heard) - catalogDateTime(b.bird.first_heard) || catalogCompareNames(a, b);
+      }
+      return catalogCompareNames(a, b);
+    });
+    return sorted;
+  }
+
+  function catalogCardMarkup(entry, position) {
+    const bird = entry.bird;
+    const idx = entry.idx;
+    const name = escapeHtml(bird.com_name || 'Unknown bird');
+    const sci = escapeHtml(bird.sci_name || '');
+    const total = Number(bird.total_count || bird.recent_count || 0);
+    const today = Number(bird.today_count || 0);
+    const genus = escapeHtml(bird.genus || String(bird.sci_name || '').split(' ')[0] || '');
+    const rarity = escapeHtml(catalogRarityLabel(bird));
+    const category = escapeHtml(catalogRaritySlug(bird));
+    const plate = String(position + 1).padStart(3, '0');
+    const search = escapeHtml(catalogSearchValue(bird));
+    const art = bird.has_image
+      ? `<img src="${escapeHtml(assetUrl(bird.image, bird.image_version))}" alt="${name}">`
+      : `<div class="catalog-card-placeholder">${escapeHtml(initials(bird.com_name))}</div>`;
+    return `<article class="catalog-card" data-bird-idx="${idx}" data-catalog-category="${category}" data-search-text="${search}" tabindex="0">
+      <div class="catalog-card-top"><span>Plate ${plate}</span><b class="catalog-card-tag">${rarity}</b></div>
+      <div class="catalog-card-art">${art}</div>
+      <div class="catalog-card-copy">
+        <h3>${name}</h3>
+        <i>${sci}</i>
+        <dl>
+          <dt>Genus</dt><dd>${genus}</dd>
+          <dt>Detections</dt><dd>${total.toLocaleString()}</dd>
+          <dt>Today</dt><dd>${today.toLocaleString()}</dd>
+          <dt>First heard</dt><dd>${relativeDateHtml(firstHeardValue(bird))}</dd>
+          <dt>Last heard</dt><dd>${relativeDateHtml(bird.last_heard || '')}</dd>
+        </dl>
+      </div>
+    </article>`;
+  }
+
+  function renderCatalog(birds) {
+    if (!catalog) return;
+    const entries = sortCatalogEntries((birds || []).map(function(bird, idx) {
+      return {bird, idx};
+    }).filter(function(entry) {
+      return catalogFilterMatches(entry.bird) && catalogSearchMatches(entry.bird);
+    }));
+    catalog.innerHTML = entries.map(catalogCardMarkup).join('');
+    catalog.hidden = entries.length === 0;
+    if (empty) {
+      empty.textContent = birds.length === 0 ? emptyDefaultText : 'No birds match this catalog view.';
+      empty.hidden = entries.length > 0;
+    }
+    if (catalogVisibleCount) catalogVisibleCount.textContent = String(entries.length);
+    if (catalogTotalCount) catalogTotalCount.textContent = String((birds || []).length);
+    refreshRelativeDates();
   }
 
   function refreshRelativeDates() {
@@ -820,15 +1055,24 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     lastGeneratedAt = payload.generated_at || lastGeneratedAt;
     lastPayloadSig = payloadSignature(payload);
     currentBirds = birds;
+    if (recentList) recentList.innerHTML = recentListMarkup(birds);
+    if (isCatalogMode) {
+      renderCatalog(birds);
+      if (!modal.hidden && activeModalSci) {
+        const modalIdx = currentBirds.findIndex(bird => bird.sci_name === activeModalSci);
+        if (modalIdx >= 0) openModal(modalIdx);
+      }
+      return;
+    }
+    if (!collage) return;
     collage.className = `bird-collage ${countClass(birds.length)}`;
     collage.dataset.layout = 'pending';
     collage.innerHTML = birds.map(birdMarkup).join('');
     collageNodes = null;
     layoutGeneration++;
     lastPackKey = '';
-    if (recentList) recentList.innerHTML = recentListMarkup(birds);
     collage.hidden = birds.length === 0;
-    empty.hidden = birds.length > 0;
+    if (empty) empty.hidden = birds.length > 0;
     schedulePack();
     refreshRelativeDates();
     if (!modal.hidden && activeModalSci) {
@@ -838,6 +1082,10 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   }
 
   function render(payload) {
+    if (isCatalogMode || !collage) {
+      applyPayload(payload);
+      return;
+    }
     const seq = ++renderSeq;
     const fadeDelay = collage.dataset.layout === 'ready' ? 170 : 0;
     collage.dataset.layout = 'pending';
@@ -883,7 +1131,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   }
 
   function packBirds() {
-    if (collage.hidden || currentBirds.length === 0 || !window.SilhouettePack) return;
+    if (!collage || collage.hidden || currentBirds.length === 0 || !window.SilhouettePack) return;
     const nodes = collageNodes || (collageNodes = Array.from(collage.querySelectorAll('.collage-bird')));
     if (nodes.length === 0) return;
 
@@ -920,7 +1168,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   }
 
   function maskHitTest(clientX, clientY) {
-    if (!window.SilhouettePack) return null;
+    if (!collage || !window.SilhouettePack) return null;
     return window.SilhouettePack.hitTest(collage, collagePlaced, clientX, clientY);
   }
 
@@ -939,6 +1187,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     body.set('sci', bird.sci_name || '');
     body.set('variant', variant);
     body.set('hours', String(initialIndex.hours || <?php echo intval($requested_hours); ?>));
+    if (isCatalogMode) body.set('catalog', '1');
     if (button) {
       button.disabled = true;
       button.setAttribute('data-loading', 'true');
@@ -975,47 +1224,92 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     collage.style.cursor = hit ? 'pointer' : 'default';
   }
 
-  collage.addEventListener('mousemove', function(event) {
-    hoverX = event.clientX;
-    hoverY = event.clientY;
-    if (hoverFrame) return;
-    hoverFrame = requestAnimationFrame(function() {
-      hoverFrame = 0;
-      updateCollageHover(hoverX, hoverY);
+  if (collage) {
+    collage.addEventListener('mousemove', function(event) {
+      hoverX = event.clientX;
+      hoverY = event.clientY;
+      if (hoverFrame) return;
+      hoverFrame = requestAnimationFrame(function() {
+        hoverFrame = 0;
+        updateCollageHover(hoverX, hoverY);
+      });
     });
-  });
 
-  collage.addEventListener('mouseleave', function() {
-    if (hoverFrame) {
-      cancelAnimationFrame(hoverFrame);
-      hoverFrame = 0;
-    }
-    if (collageHovered && collageHovered.node) collageHovered.node.classList.remove('is-hover');
-    collageHovered = null;
-    collage.style.cursor = 'default';
-  });
-
-  collage.addEventListener('click', function(event) {
-    const regen = event.target.closest && event.target.closest('.regen-image-btn');
-    if (regen) {
-      event.preventDefault();
-      event.stopPropagation();
-      regenerateImage(Number(regen.dataset.birdIdx), regen.dataset.variant, regen);
-      return;
-    }
-    const hit = maskHitTest(event.clientX, event.clientY);
-    if (hit) openModal(hit.idx);
-  });
-
-  collage.addEventListener('keydown', function(event) {
-    if (event.key === 'Enter' || event.key === ' ') {
-      const bird = event.target.closest('.collage-bird');
-      if (bird) {
-        event.preventDefault();
-        openModal(Number(bird.dataset.birdIdx));
+    collage.addEventListener('mouseleave', function() {
+      if (hoverFrame) {
+        cancelAnimationFrame(hoverFrame);
+        hoverFrame = 0;
       }
-    }
-  });
+      if (collageHovered && collageHovered.node) collageHovered.node.classList.remove('is-hover');
+      collageHovered = null;
+      collage.style.cursor = 'default';
+    });
+
+    collage.addEventListener('click', function(event) {
+      const regen = event.target.closest && event.target.closest('.regen-image-btn');
+      if (regen) {
+        event.preventDefault();
+        event.stopPropagation();
+        regenerateImage(Number(regen.dataset.birdIdx), regen.dataset.variant, regen);
+        return;
+      }
+      const hit = maskHitTest(event.clientX, event.clientY);
+      if (hit) openModal(hit.idx);
+    });
+
+    collage.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        const bird = event.target.closest('.collage-bird');
+        if (bird) {
+          event.preventDefault();
+          openModal(Number(bird.dataset.birdIdx));
+        }
+      }
+    });
+  }
+
+  if (catalog) {
+    catalog.addEventListener('click', function(event) {
+      const card = event.target.closest && event.target.closest('.catalog-card');
+      if (card) openModal(Number(card.dataset.birdIdx));
+    });
+
+    catalog.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        const card = event.target.closest('.catalog-card');
+        if (card) {
+          event.preventDefault();
+          openModal(Number(card.dataset.birdIdx));
+        }
+      }
+    });
+  }
+
+  if (catalogSearch) {
+    catalogSearch.addEventListener('input', function() {
+      catalogSearchText = catalogSearch.value.trim().toLowerCase();
+      renderCatalog(currentBirds);
+    });
+  }
+
+  if (catalogSort) {
+    catalogSort.addEventListener('change', function() {
+      catalogSortMode = catalogSort.value || 'az';
+      renderCatalog(currentBirds);
+    });
+  }
+
+  if (catalogFilters) {
+    catalogFilters.addEventListener('click', function(event) {
+      const button = event.target.closest('button[data-catalog-filter]');
+      if (!button) return;
+      catalogFilter = button.dataset.catalogFilter || 'all';
+      catalogFilters.querySelectorAll('button').forEach(function(filterButton) {
+        filterButton.classList.toggle('active', filterButton === button);
+      });
+      renderCatalog(currentBirds);
+    });
+  }
 
   closeButton.addEventListener('click', closeModal);
   modal.addEventListener('click', function(event) {
@@ -1039,17 +1333,17 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     if (event.key === 'Escape' && !modal.hidden) closeModal();
   });
   window.addEventListener('resize', function() {
-    schedulePack(100);
+    if (collage) schedulePack(100);
   });
-  window.addEventListener('load', function() { schedulePack(); });
-  schedulePack();
+  window.addEventListener('load', function() { if (collage) schedulePack(); });
+  if (collage) schedulePack();
 
   if (rangeNav) {
     rangeNav.addEventListener('click', function(event) {
       const link = event.target.closest('a');
       if (!link || link.classList.contains('active')) return;
       event.preventDefault();
-      collage.dataset.layout = 'pending';
+      if (collage) collage.dataset.layout = 'pending';
       window.setTimeout(function() {
         window.location.href = link.href;
       }, 120);
@@ -1098,7 +1392,8 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   });
 
   window.setInterval(refreshRelativeDates, 60000);
-  refreshRelativeDates();
+  if (catalog) renderCatalog(currentBirds);
+  else refreshRelativeDates();
   schedulePoll(pollDelay);
 })();
 </script>

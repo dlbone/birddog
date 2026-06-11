@@ -179,6 +179,8 @@ def get_species(hours, limit, conn=None, labels=None, recordings_cache=None):
     cutoff_date = cutoff.strftime("%Y-%m-%d")
     cutoff_time = cutoff.strftime("%H:%M:%S")
     def fetch_rows(use_all_time):
+        species_limit = int(limit or 0)
+        limit_clause = "" if species_limit <= 0 else "LIMIT ?"
         if use_all_time:
             index_hint = "INDEXED BY detections_Sci_Name_Date_Time"
             where_sql = ""
@@ -202,7 +204,7 @@ def get_species(hours, limit, conn=None, labels=None, recordings_cache=None):
               {where_sql}
               GROUP BY d.Sci_Name
               ORDER BY LastHeard DESC
-              LIMIT ?
+              {limit_clause}
             )
             SELECT
               r.Sci_Name,
@@ -218,7 +220,10 @@ def get_species(hours, limit, conn=None, labels=None, recordings_cache=None):
             GROUP BY r.Sci_Name, r.Com_Name, r.RecentCount, r.LastHeard
             ORDER BY r.LastHeard DESC
         """
-        return conn.execute(recent_sql, tuple(params + [limit])).fetchall()
+        query_params = list(params)
+        if species_limit > 0:
+            query_params.append(species_limit)
+        return conn.execute(recent_sql, tuple(query_params)).fetchall()
 
     def fetch_recordings_by_species(sci_names, per_species_limit):
         if not sci_names:
@@ -582,7 +587,9 @@ def generate_image(species, key, model, force=False, variant="collage"):
     return True
 
 
-def index_path_for_hours(hours):
+def index_path_for_hours(hours, catalog=False):
+    if catalog:
+        return os.path.join(OUTPUT_DIR, "index-catalog.json")
     if hours == TODAY_HOURS:
         return os.path.join(OUTPUT_DIR, "index-today.json")
     if hours <= 0 or hours >= 1000000:
@@ -595,24 +602,25 @@ def payload_signature(species):
     return hashlib.sha1(source.encode("utf-8")).hexdigest()
 
 
-def write_index(species, hours):
+def write_index(species, hours, catalog=False):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(IMAGE_DIR, exist_ok=True)
     payload = {
         "index_schema": INDEX_SCHEMA_VERSION,
         "generated_at": dt.datetime.now().isoformat(timespec="seconds"),
         "hours": hours,
+        "view": "catalog" if catalog else "recent",
         "species_count": len(species),
         "payload_sig": payload_signature(species),
         "species": species,
     }
-    index_path = index_path_for_hours(hours)
+    index_path = index_path_for_hours(hours, catalog=catalog)
     tmp_path = f"{index_path}.tmp"
     with open(tmp_path, "w", encoding="utf-8") as handle:
         json.dump(payload, handle, separators=(",", ":"))
         handle.write("\n")
     os.replace(tmp_path, index_path)
-    if int(hours) == 24:
+    if int(hours) == 24 and not catalog:
         tmp_path = f"{INDEX_PATH}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, separators=(",", ":"))
@@ -696,9 +704,9 @@ def read_existing_species():
     return []
 
 
-def read_existing_species_for_hours(hours):
+def read_existing_species_for_hours(hours, catalog=False):
     try:
-        with open(index_path_for_hours(hours), "r", encoding="utf-8") as handle:
+        with open(index_path_for_hours(hours, catalog=catalog), "r", encoding="utf-8") as handle:
             payload = json.load(handle)
             return payload.get("species") or []
     except (FileNotFoundError, json.JSONDecodeError):
@@ -750,7 +758,7 @@ def index_has_pending_work(payload, args):
 
 
 def index_is_current(hours, args):
-    index_path = index_path_for_hours(hours)
+    index_path = index_path_for_hours(hours, catalog=args.catalog)
     if not os.path.exists(index_path):
         return False
     if os.path.getmtime(__file__) > os.path.getmtime(index_path):
@@ -783,7 +791,7 @@ def build_index(args, hours, conn=None, labels=None, recordings_cache=None, imag
     if not args.force:
         existing_by_species = {
             bird.get("sci_name"): bird
-            for bird in read_existing_species_for_hours(hours)
+            for bird in read_existing_species_for_hours(hours, catalog=args.catalog)
             if bird.get("sci_name")
         }
     if args.generate and species:
@@ -814,8 +822,8 @@ def build_index(args, hours, conn=None, labels=None, recordings_cache=None, imag
 
     attach_image_metadata(species, existing_by_species, image_meta_cache=image_meta_cache)
     enrich_metadata(species, fetch_missing=not args.skip_enrich)
-    write_index(species, hours)
-    print(f"Wrote {index_path_for_hours(hours)} with {len(species)} species.")
+    write_index(species, hours, catalog=args.catalog)
+    print(f"Wrote {index_path_for_hours(hours, catalog=args.catalog)} with {len(species)} species.")
 
 
 def main():
@@ -823,6 +831,7 @@ def main():
     parser.add_argument("--hours", type=int, default=24, help="recent detection window")
     parser.add_argument("--all-ranges", action="store_true", help="build every collage time-window index")
     parser.add_argument("--limit", type=int, default=28, help="max birds in the collage")
+    parser.add_argument("--catalog", action="store_true", help="write the full bird catalog index")
     parser.add_argument("--generate", action="store_true", help="generate missing images with Gemini")
     parser.add_argument("--force", action="store_true", help="regenerate existing images")
     parser.add_argument("--model", default=os.environ.get("GEMINI_IMAGE_MODEL", DEFAULT_MODEL))
@@ -833,7 +842,7 @@ def main():
     parser.add_argument("--if-stale", action="store_true", help="exit without rebuilding when indexes are already current")
     args = parser.parse_args()
 
-    hours_list = RANGE_HOURS if args.all_ranges else (args.hours,)
+    hours_list = (1000000,) if args.catalog else (RANGE_HOURS if args.all_ranges else (args.hours,))
     if args.if_stale and indexes_are_current(hours_list, args):
         print("Collage indexes already current; nothing to do.")
         return

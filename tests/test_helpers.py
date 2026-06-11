@@ -362,6 +362,63 @@ class TestCollageIndexQueries(unittest.TestCase):
                 rec['file_name'] for rec in recordings
             ])
 
+    def test_species_limit_zero_returns_all_species(self):
+        with tempfile.TemporaryDirectory() as root:
+            db_path = os.path.join(root, 'birds.db')
+            con = sqlite3.connect(db_path)
+            con.row_factory = sqlite3.Row
+            con.execute("""
+                CREATE TABLE detections (
+                  Date DATE,
+                  Time TIME,
+                  Sci_Name VARCHAR(100) NOT NULL,
+                  Com_Name VARCHAR(100) NOT NULL,
+                  Confidence FLOAT,
+                  Lat FLOAT,
+                  Lon FLOAT,
+                  Cutoff FLOAT,
+                  Week INT,
+                  Sens FLOAT,
+                  Overlap FLOAT,
+                  File_Name VARCHAR(100) NOT NULL
+                )
+            """)
+            bird_collage.ensure_detection_indexes(con)
+            detections = [
+                ('2026-06-02', '12:00:00', 'Buteo lineatus', 'Red-shouldered Hawk', 'hawk.mp3'),
+                ('2026-06-02', '12:01:00', 'Cardinalis cardinalis', 'Northern Cardinal', 'cardinal.mp3'),
+                ('2026-06-02', '12:02:00', 'Sialia sialis', 'Eastern Bluebird', 'bluebird.mp3'),
+            ]
+            for date, time, sci_name, com_name, file_name in detections:
+                con.execute(
+                    "INSERT INTO detections VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        date,
+                        time,
+                        sci_name,
+                        com_name,
+                        0.8,
+                        36.0,
+                        -79.0,
+                        0.7,
+                        23,
+                        1.25,
+                        0.0,
+                        file_name,
+                    ),
+                )
+            con.commit()
+
+            species = bird_collage.get_species(1000000, 0, conn=con, labels={})
+            con.close()
+
+            self.assertEqual(3, len(species))
+            self.assertEqual([
+                'Eastern Bluebird',
+                'Northern Cardinal',
+                'Red-shouldered Hawk',
+            ], [bird['com_name'] for bird in species])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -12,6 +12,7 @@ if (session_status() === PHP_SESSION_ACTIVE) {
 }
 $hours = isset($_GET['hours']) ? intval($_GET['hours']) : -1;
 $new_mode = isset($_GET['new']) && strval($_GET['new']) === '1';
+$catalog_mode = isset($_GET['catalog']) && strval($_GET['catalog']) === '1';
 $range_files = [
   1 => 'index-1h.json',
   12 => 'index-12h.json',
@@ -27,11 +28,16 @@ if (!array_key_exists($hours, $range_files)) {
 if ($new_mode) {
   $hours = 24;
 }
+if ($catalog_mode) {
+  $hours = 1000000;
+  $new_mode = false;
+}
 
-$index_path = $home . '/BirdSongs/Extracted/collage/' . $range_files[$hours];
+$index_file = $catalog_mode ? 'index-catalog.json' : $range_files[$hours];
+$index_path = $home . '/BirdSongs/Extracted/collage/' . $index_file;
 $script_path = $home . '/BirdNET-Pi/scripts/bird_collage.py';
 $db_path = $home . '/BirdNET-Pi/scripts/birds.db';
-$lock_path = $home . '/BirdSongs/Extracted/collage/build-' . $hours . '.lock';
+$lock_path = $home . '/BirdSongs/Extracted/collage/build-' . ($catalog_mode ? 'catalog' : $hours) . '.lock';
 $all_lock_path = $home . '/BirdSongs/Extracted/collage/build-all.lock';
 $index_ttl = 300;
 $all_index_ttl = 900;
@@ -97,9 +103,12 @@ function collage_load_payload($index_path, &$raw_payload) {
   return json_decode($raw_payload, true);
 }
 
-function run_collage_builder($hours, $generate, $background, $lock_path, $home, $script_path, $builder_user, $skip_enrich = true, $if_stale = false) {
+function run_collage_builder($hours, $generate, $background, $lock_path, $home, $script_path, $builder_user, $skip_enrich = true, $if_stale = false, $catalog = false) {
   if (collage_builder_locked($lock_path)) return false;
-  $args = ' --hours ' . intval($hours) . ' --limit 28';
+  $args = ' --hours ' . intval($hours) . ' --limit ' . ($catalog ? '0' : '28');
+  if ($catalog) {
+    $args .= ' --catalog';
+  }
   if ($if_stale) {
     $args .= ' --if-stale';
   }
@@ -217,7 +226,7 @@ function collage_needs_metadata($payload) {
 if (file_exists($index_path)) {
   $payload = collage_load_payload($index_path, $raw_payload);
   if (collage_payload_schema_old($payload, $collage_index_schema) || collage_has_cached_missing_images($payload, $home)) {
-    if (run_collage_builder($hours, false, false, $lock_path, $home, $script_path, $builder_user)) {
+    if (run_collage_builder($hours, false, false, $lock_path, $home, $script_path, $builder_user, true, false, $catalog_mode)) {
       clearstatcache(true, $index_path);
       $payload = null;
       $raw_payload = null;
@@ -229,7 +238,7 @@ if (file_exists($index_path)) {
 if ($stale && !$locked) {
   if (!file_exists($index_path)) {
     // First boot (or cache reset): build inline so the page has content.
-    if (run_collage_builder($hours, false, false, $lock_path, $home, $script_path, $builder_user)) {
+    if (run_collage_builder($hours, false, false, $lock_path, $home, $script_path, $builder_user, true, false, $catalog_mode)) {
       clearstatcache(true, $index_path);
       $payload = null;
       $raw_payload = null;
@@ -238,7 +247,7 @@ if ($stale && !$locked) {
   } else {
     // Steady state: let a background rebuild refresh stale pages to avoid
     // adding request latency while this lightweight box is already busy.
-    run_collage_builder($hours, false, true, $lock_path, $home, $script_path, $builder_user);
+    run_collage_builder($hours, false, true, $lock_path, $home, $script_path, $builder_user, true, false, $catalog_mode);
   }
 }
 
@@ -252,9 +261,9 @@ if (!$locked && file_exists($index_path)) {
     $payload = collage_load_payload($index_path, $raw_payload);
   }
   if (collage_needs_generated_images($payload)) {
-    run_collage_builder($hours, true, true, $lock_path, $home, $script_path, $builder_user, false, true);
+    run_collage_builder($hours, true, true, $lock_path, $home, $script_path, $builder_user, false, true, $catalog_mode);
   } else if (collage_needs_metadata($payload)) {
-    run_collage_builder($hours, false, true, $lock_path, $home, $script_path, $builder_user, false, true);
+    run_collage_builder($hours, false, true, $lock_path, $home, $script_path, $builder_user, false, true, $catalog_mode);
   }
 }
 
@@ -281,7 +290,7 @@ if (file_exists($index_path)) {
 echo json_encode([
   'generated_at' => null,
   'hours' => $hours,
-  'view' => $new_mode ? 'new' : 'recent',
+  'view' => $catalog_mode ? 'catalog' : ($new_mode ? 'new' : 'recent'),
   'species_count' => 0,
   'species' => [],
 ]);
