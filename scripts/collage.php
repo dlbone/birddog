@@ -345,15 +345,15 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
         </label>
         <div class="catalog-filter-stack">
           <div class="catalog-filter-row">
-            <span>Rarity</span>
+            <span>Frequency / Status</span>
             <div class="catalog-filters" role="group" aria-label="Catalog rarity" data-catalog-filter-group="rarity">
               <?php foreach ($catalog_rarity_categories as $category) {
                 echo '<button type="button" data-catalog-filter="' . htmlspecialchars($category['slug']) . '"' . ($category['slug'] === 'all' ? ' class="active"' : '') . '>' . htmlspecialchars($category['label']) . '</button>';
               } ?>
             </div>
           </div>
-          <div class="catalog-filter-row catalog-type-filter-row"<?php if (!$catalog_has_type_filters) echo ' hidden'; ?>>
-            <span>Type</span>
+          <div class="catalog-filter-row catalog-type-filter-row">
+            <span>Bird Type</span>
             <div class="catalog-filters" role="group" aria-label="Catalog type" data-catalog-filter-group="type">
               <?php foreach ($catalog_type_categories as $category) {
                 echo '<button type="button" data-catalog-filter="' . htmlspecialchars($category['slug']) . '"' . ($category['slug'] === 'all' ? ' class="active"' : '') . '>' . htmlspecialchars($category['label']) . '</button>';
@@ -487,7 +487,6 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   const catalogSort = document.querySelector('.catalog-sort-select');
   const catalogFilters = document.querySelectorAll('.catalog-filters');
   const catalogTypeFilters = document.querySelector('.catalog-filters[data-catalog-filter-group="type"]');
-  const catalogTypeFilterRow = document.querySelector('.catalog-type-filter-row');
   const catalogVisibleCount = document.querySelector('.catalog-visible-count');
   const catalogTotalCount = document.querySelector('.catalog-total-count');
   const modal = document.querySelector('.bird-modal');
@@ -772,10 +771,6 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   function updateCatalogTypeFilters(birds) {
     if (!catalogTypeFilters) return;
     const categories = catalogTypeCategoryList(birds);
-    const hasClassifiedType = categories.some(function(category) {
-      return category[0] !== 'all' && category[0] !== 'unclassified';
-    });
-    if (catalogTypeFilterRow) catalogTypeFilterRow.hidden = !hasClassifiedType;
     if (!categories.some(function(category) { return category[0] === catalogTypeFilter; })) {
       catalogTypeFilter = 'all';
     }
