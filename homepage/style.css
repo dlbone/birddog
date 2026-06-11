@@ -1065,7 +1065,7 @@ button:hover {
   grid-template-rows: auto 164px minmax(0, auto);
   gap: 10px;
   margin: 0;
-  padding: 12px;
+  padding: 12px 12px 18px;
   border: 1px solid rgba(87, 71, 49, 0.20);
   border-radius: 4px;
   background:
@@ -1078,7 +1078,6 @@ button:hover {
   color: #2b2820;
   outline: none;
   overflow: auto;
-  overscroll-behavior: contain;
 }
 
 .catalog-card.is-featured {
@@ -1088,7 +1087,7 @@ button:hover {
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   grid-template-rows: auto minmax(0, 1fr);
   column-gap: 20px;
-  padding: 16px;
+  padding: 16px 16px 22px;
 }
 
 .catalog-card:hover,
@@ -2000,7 +1999,7 @@ button:hover {
     grid-template-columns: 118px minmax(0, 1fr);
     grid-template-rows: auto auto;
     column-gap: 10px;
-    padding: 14px;
+    padding: 14px 14px 18px;
   }
   .catalog-card-top {
     grid-column: 1 / -1;
