@@ -1023,26 +1023,27 @@ button:hover {
 }
 
 .catalog-filter-stack {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   min-width: 0;
 }
 
 .catalog-filter-row {
-  display: grid;
-  grid-template-columns: 62px minmax(0, 1fr);
+  display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 0;
   min-width: 0;
 }
 
 .catalog-filter-row > span {
-  color: #83796a;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  display: none;
+}
+
+.catalog-filter-row + .catalog-filter-row {
+  border-left: 1px solid rgba(69, 60, 44, 0.20);
+  padding-left: 12px;
 }
 
 .catalog-filters button {
@@ -2004,8 +2005,11 @@ button:hover {
     padding: 12px 0;
   }
   .catalog-filter-row {
-    grid-template-columns: 1fr;
-    gap: 6px;
+    gap: 0;
+  }
+  .catalog-filter-row + .catalog-filter-row {
+    border-left: 0;
+    padding-left: 0;
   }
   .catalog-filters {
     align-self: auto;

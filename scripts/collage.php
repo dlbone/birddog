@@ -279,6 +279,13 @@ $catalog_rarity_categories = [
   ['slug' => 'new', 'label' => 'Rare'],
 ];
 $catalog_type_categories = catalog_type_categories($birds);
+$catalog_has_type_filters = false;
+foreach ($catalog_type_categories as $category) {
+  if ($category['slug'] !== 'all' && $category['slug'] !== 'unclassified') {
+    $catalog_has_type_filters = true;
+    break;
+  }
+}
 $json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 $initial_payload_json = json_encode($initial_payload, $json_flags);
 if ($initial_payload_json === false) {
@@ -345,7 +352,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
               } ?>
             </div>
           </div>
-          <div class="catalog-filter-row">
+          <div class="catalog-filter-row catalog-type-filter-row"<?php if (!$catalog_has_type_filters) echo ' hidden'; ?>>
             <span>Type</span>
             <div class="catalog-filters" role="group" aria-label="Catalog type" data-catalog-filter-group="type">
               <?php foreach ($catalog_type_categories as $category) {
@@ -480,6 +487,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   const catalogSort = document.querySelector('.catalog-sort-select');
   const catalogFilters = document.querySelectorAll('.catalog-filters');
   const catalogTypeFilters = document.querySelector('.catalog-filters[data-catalog-filter-group="type"]');
+  const catalogTypeFilterRow = document.querySelector('.catalog-type-filter-row');
   const catalogVisibleCount = document.querySelector('.catalog-visible-count');
   const catalogTotalCount = document.querySelector('.catalog-total-count');
   const modal = document.querySelector('.bird-modal');
@@ -764,6 +772,10 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   function updateCatalogTypeFilters(birds) {
     if (!catalogTypeFilters) return;
     const categories = catalogTypeCategoryList(birds);
+    const hasClassifiedType = categories.some(function(category) {
+      return category[0] !== 'all' && category[0] !== 'unclassified';
+    });
+    if (catalogTypeFilterRow) catalogTypeFilterRow.hidden = !hasClassifiedType;
     if (!categories.some(function(category) { return category[0] === catalogTypeFilter; })) {
       catalogTypeFilter = 'all';
     }
