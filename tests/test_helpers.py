@@ -163,6 +163,24 @@ class TestCollageMetadataState(unittest.TestCase):
         self.assertFalse(bird_collage.is_new_bird('2026-06-02 09:59:59', now=now))
         self.assertFalse(bird_collage.is_new_bird('manual seed', now=now))
 
+    def test_collage_prompt_requires_visible_feet_and_branch(self):
+        with patch.object(bird_collage, 'STYLE_PATH', '/tmp/missing-bird-collage-style.txt'):
+            prompt = bird_collage.prompt_for('Common Grackle', 'Quiscalus quiscula')
+
+        self.assertIn('perched naturally on a simple narrow branch', prompt)
+        self.assertIn('feet, and toes gripping the branch', prompt)
+        self.assertIn('do not crop, cover, or hide the feet', prompt)
+        self.assertNotIn('no branch', prompt.lower())
+
+    def test_detail_prompt_requires_flight_pose(self):
+        with patch.object(bird_collage, 'STYLE_PATH', '/tmp/missing-bird-collage-style.txt'):
+            prompt = bird_collage.prompt_for('Common Grackle', 'Quiscalus quiscula', variant='detail')
+
+        self.assertIn('flying in midair', prompt)
+        self.assertIn('wings spread', prompt)
+        self.assertIn('not perched or standing', prompt)
+        self.assertNotIn('standing naturally', prompt)
+
 
 class TestReportingBatchDbWrites(unittest.TestCase):
 

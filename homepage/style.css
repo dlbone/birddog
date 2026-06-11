@@ -777,31 +777,6 @@ button:hover {
   filter: saturate(0.9) contrast(1.08);
 }
 
-.new-bird-badge {
-  position: absolute;
-  bottom: 4px;
-  left: 50%;
-  z-index: 10002;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 7px;
-  border: 1px solid rgba(77, 62, 39, 0.30);
-  border-bottom-color: rgba(77, 62, 39, 0.52);
-  background: rgba(246, 238, 220, 0.94);
-  color: #332b20;
-  box-shadow: 0 4px 11px rgba(48, 38, 22, 0.18);
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 10px;
-  line-height: 1;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  text-shadow: 0 1px 0 rgba(246, 238, 220, 0.9);
-  white-space: nowrap;
-  transform: translateX(-50%) rotate(calc(var(--bird-rotate, 0deg) * -1));
-  pointer-events: none;
-}
-
 .regen-image-btn {
   width: 28px;
   height: 28px;
@@ -1325,7 +1300,7 @@ button:hover {
 .modal-regen {
   position: absolute;
   top: 10px;
-  right: 10px;
+  left: 10px;
   z-index: 3;
 }
 
@@ -1402,8 +1377,8 @@ button:hover {
 .bird-modal-meta {
   display: grid;
   grid-template-columns: minmax(68px, max-content) minmax(0, 1fr);
-  column-gap: 14px;
-  row-gap: 8px;
+  column-gap: 0px;
+  row-gap: 0px;
   align-items: baseline;
   max-width: 420px;
   margin: 0;
@@ -1517,19 +1492,26 @@ button:hover {
 }
 
 .bird-modal-download {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  justify-self: end;
   color: #8b371e;
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 11px;
-  letter-spacing: 1px;
-  text-align: right;
   text-decoration: none;
-  text-transform: uppercase;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.bird-modal-download svg {
+  width: 18px;
+  height: 18px;
+  display: block;
 }
 
 .bird-modal-download:hover {
   color: #5f2414;
-  font-weight: inherit;
-  text-decoration: underline;
+  transform: translateY(-1px);
+  text-decoration: none;
 }
 
 .bird-modal-empty {
