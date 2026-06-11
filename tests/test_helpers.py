@@ -145,6 +145,8 @@ class TestCollageMetadataState(unittest.TestCase):
             meta = {
                 'Buteo lineatus': {
                     'description': 'A small hawk.',
+                    'bird_type_slug': 'raptors',
+                    'metadata_schema': bird_collage.METADATA_SCHEMA_VERSION,
                     'date_created': dt.date.today().isoformat(),
                 }
             }
@@ -154,6 +156,12 @@ class TestCollageMetadataState(unittest.TestCase):
 
             with patch.object(bird_collage, 'META_PATH', meta_path):
                 self.assertFalse(bird_collage.metadata_lookup_pending({'sci_name': 'Buteo lineatus'}))
+
+    def test_bird_type_uses_family_before_order(self):
+        slug, label = bird_collage.classify_bird_type('Corvidae', 'Passeriformes')
+
+        self.assertEqual('corvids', slug)
+        self.assertEqual('Corvids', label)
 
     def test_new_bird_badge_state_expires_after_24_hours(self):
         now = dt.datetime(2026, 6, 3, 10, 0, 0)

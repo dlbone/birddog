@@ -218,7 +218,7 @@ function collage_needs_generated_images($payload) {
 function collage_needs_metadata($payload) {
   if (empty($payload['species']) || !is_array($payload['species'])) return false;
   foreach ($payload['species'] as $bird) {
-    if (empty($bird['description'])) return true;
+    if (empty($bird['description']) || empty($bird['bird_type_slug'])) return true;
   }
   return false;
 }

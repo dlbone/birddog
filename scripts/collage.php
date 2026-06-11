@@ -211,11 +211,54 @@ function catalog_rarity_label($bird) {
   return ucfirst($slug);
 }
 
+function catalog_type_slug($bird) {
+  $slug = strtolower(trim(strval($bird['bird_type_slug'] ?? '')));
+  $slug = preg_replace('/[^a-z0-9]+/', '-', $slug);
+  $slug = trim($slug, '-');
+  return $slug === '' ? 'unclassified' : $slug;
+}
+
+function catalog_type_label($bird) {
+  $label = trim(strval($bird['bird_type'] ?? ''));
+  return $label === '' ? 'Unclassified' : $label;
+}
+
+function catalog_type_categories($birds) {
+  $preferred = [
+    'songbirds', 'corvids', 'woodpeckers', 'raptors', 'owls', 'waterfowl',
+    'shorebirds', 'waders', 'rails', 'doves', 'hummingbirds', 'gamebirds',
+    'nightbirds', 'cuckoos', 'kingfishers', 'parrots', 'unclassified',
+  ];
+  $categories = [];
+  foreach ($birds as $bird) {
+    $slug = catalog_type_slug($bird);
+    if (!isset($categories[$slug])) {
+      $categories[$slug] = catalog_type_label($bird);
+    }
+  }
+  uksort($categories, function($a, $b) use ($preferred, $categories) {
+    $a_index = array_search($a, $preferred, true);
+    $b_index = array_search($b, $preferred, true);
+    if ($a_index !== false || $b_index !== false) {
+      return ($a_index === false ? 999 : $a_index) <=> ($b_index === false ? 999 : $b_index);
+    }
+    return strcasecmp($categories[$a], $categories[$b]);
+  });
+  $rows = [['slug' => 'all', 'label' => 'All']];
+  foreach ($categories as $slug => $label) {
+    $rows[] = ['slug' => $slug, 'label' => $label];
+  }
+  return $rows;
+}
+
 function catalog_search_text($bird) {
   return strtolower(implode(' ', [
     $bird['com_name'] ?? '',
     $bird['sci_name'] ?? '',
     $bird['genus'] ?? '',
+    $bird['family'] ?? '',
+    $bird['order'] ?? '',
+    catalog_type_label($bird),
     catalog_rarity_label($bird),
   ]));
 }
@@ -227,7 +270,7 @@ $rail_heading = $catalog_mode ? 'Archive leaders' : ($new_mode ? 'New birds' : '
 $empty_message = $catalog_mode ? 'No catalog entries yet. Birds will appear after detections are indexed.' : ($new_mode ? 'No new birds in the last 24 hours.' : 'No detections yet. The plate will fill in as BirdNET hears species.');
 $page_title = $catalog_mode ? 'Bird Catalog' : ($new_mode ? 'New Visitors' : 'Recent Visitors');
 $initial_payload = $payload ?: ['generated_at' => null, 'species' => []];
-$catalog_categories = [
+$catalog_rarity_categories = [
   ['slug' => 'all', 'label' => 'All'],
   ['slug' => 'today', 'label' => 'Seen Today'],
   ['slug' => 'common', 'label' => 'Common'],
@@ -235,6 +278,7 @@ $catalog_categories = [
   ['slug' => 'occasional', 'label' => 'Occasional'],
   ['slug' => 'new', 'label' => 'Rare'],
 ];
+$catalog_type_categories = catalog_type_categories($birds);
 $json_flags = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 $initial_payload_json = json_encode($initial_payload, $json_flags);
 if ($initial_payload_json === false) {
@@ -292,10 +336,23 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           <span>Search</span>
           <input class="catalog-search-input" type="search" placeholder="Search species..." autocomplete="off">
         </label>
-        <div class="catalog-filters" role="group" aria-label="Catalog categories">
-          <?php foreach ($catalog_categories as $category) {
-            echo '<button type="button" data-catalog-filter="' . htmlspecialchars($category['slug']) . '"' . ($category['slug'] === 'all' ? ' class="active"' : '') . '>' . htmlspecialchars($category['label']) . '</button>';
-          } ?>
+        <div class="catalog-filter-stack">
+          <div class="catalog-filter-row">
+            <span>Rarity</span>
+            <div class="catalog-filters" role="group" aria-label="Catalog rarity" data-catalog-filter-group="rarity">
+              <?php foreach ($catalog_rarity_categories as $category) {
+                echo '<button type="button" data-catalog-filter="' . htmlspecialchars($category['slug']) . '"' . ($category['slug'] === 'all' ? ' class="active"' : '') . '>' . htmlspecialchars($category['label']) . '</button>';
+              } ?>
+            </div>
+          </div>
+          <div class="catalog-filter-row">
+            <span>Type</span>
+            <div class="catalog-filters" role="group" aria-label="Catalog type" data-catalog-filter-group="type">
+              <?php foreach ($catalog_type_categories as $category) {
+                echo '<button type="button" data-catalog-filter="' . htmlspecialchars($category['slug']) . '"' . ($category['slug'] === 'all' ? ' class="active"' : '') . '>' . htmlspecialchars($category['label']) . '</button>';
+              } ?>
+            </div>
+          </div>
         </div>
         <label class="catalog-sort">
           <span>Sort</span>
@@ -321,14 +378,16 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           $genus = htmlspecialchars($genus_text);
           $category_slug = htmlspecialchars(catalog_rarity_slug($bird));
           $category_label = htmlspecialchars(catalog_rarity_label($bird));
+          $type_slug = htmlspecialchars(catalog_type_slug($bird));
+          $type_label = htmlspecialchars(catalog_type_label($bird));
           $search_text = htmlspecialchars(catalog_search_text($bird));
           $last_heard = htmlspecialchars($bird['last_heard'] ?? '');
           $first_heard = htmlspecialchars($bird['first_heard'] ?? '');
           $plate = str_pad(strval($idx + 1), 3, '0', STR_PAD_LEFT);
           $plate_label = $idx === 0 ? 'Featured' : 'Plate ' . $plate;
           $card_class = $idx === 0 ? 'catalog-card is-featured' : 'catalog-card';
-          echo '<article class="' . $card_class . '" data-bird-idx="' . intval($idx) . '" data-catalog-category="' . $category_slug . '" data-search-text="' . $search_text . '" tabindex="0">';
-          echo '<div class="catalog-card-top"><span>' . htmlspecialchars($plate_label) . '</span><b class="catalog-card-tag">' . $category_label . '</b></div>';
+          echo '<article class="' . $card_class . '" data-bird-idx="' . intval($idx) . '" data-catalog-rarity="' . $category_slug . '" data-catalog-type="' . $type_slug . '" data-search-text="' . $search_text . '" tabindex="0">';
+          echo '<div class="catalog-card-top"><span>' . htmlspecialchars($plate_label) . '</span><div class="catalog-card-tags"><b class="catalog-card-tag">' . $category_label . '</b><b class="catalog-card-tag catalog-card-type">' . $type_label . '</b></div></div>';
           echo '<div class="catalog-card-art">';
           if (!empty($bird['has_image'])) {
             $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
@@ -419,7 +478,8 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   const recentList = document.querySelector('.field-recent-list');
   const catalogSearch = document.querySelector('.catalog-search-input');
   const catalogSort = document.querySelector('.catalog-sort-select');
-  const catalogFilters = document.querySelector('.catalog-filters');
+  const catalogFilters = document.querySelectorAll('.catalog-filters');
+  const catalogTypeFilters = document.querySelector('.catalog-filters[data-catalog-filter-group="type"]');
   const catalogVisibleCount = document.querySelector('.catalog-visible-count');
   const catalogTotalCount = document.querySelector('.catalog-total-count');
   const modal = document.querySelector('.bird-modal');
@@ -449,10 +509,16 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   let layoutGeneration = 0;
   let lastPackKey = '';
   let collageNodes = null;
-  let catalogFilter = 'all';
+  let catalogRarityFilter = 'all';
+  let catalogTypeFilter = 'all';
   let catalogSearchText = '';
   let catalogSortMode = 'az';
   const emptyDefaultText = empty ? empty.textContent : '';
+  const catalogTypeOrder = [
+    'songbirds', 'corvids', 'woodpeckers', 'raptors', 'owls', 'waterfowl',
+    'shorebirds', 'waders', 'rails', 'doves', 'hummingbirds', 'gamebirds',
+    'nightbirds', 'cuckoos', 'kingfishers', 'parrots', 'unclassified'
+  ];
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
   const downloadIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>';
 
@@ -634,11 +700,27 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     return rarity.charAt(0).toUpperCase() + rarity.slice(1);
   }
 
+  function catalogTypeSlug(bird) {
+    const slug = String((bird && bird.bird_type_slug) || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    return slug || 'unclassified';
+  }
+
+  function catalogTypeLabel(bird) {
+    return String((bird && bird.bird_type) || '').trim() || 'Unclassified';
+  }
+
   function catalogSearchValue(bird) {
     return [
       bird.com_name || '',
       bird.sci_name || '',
       bird.genus || '',
+      bird.family || '',
+      bird.order || '',
+      catalogTypeLabel(bird),
       catalogRarityLabel(bird)
     ].join(' ').toLowerCase();
   }
@@ -649,14 +731,46 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   }
 
   function catalogFilterMatches(bird) {
-    if (catalogFilter === 'all') return true;
-    if (catalogFilter === 'today') return Number(bird.today_count || 0) > 0;
-    return catalogRaritySlug(bird) === catalogFilter;
+    const rarityMatches = catalogRarityFilter === 'all'
+      || (catalogRarityFilter === 'today' && Number(bird.today_count || 0) > 0)
+      || catalogRaritySlug(bird) === catalogRarityFilter;
+    const typeMatches = catalogTypeFilter === 'all' || catalogTypeSlug(bird) === catalogTypeFilter;
+    return rarityMatches && typeMatches;
   }
 
   function catalogSearchMatches(bird) {
     if (!catalogSearchText) return true;
     return catalogSearchValue(bird).includes(catalogSearchText);
+  }
+
+  function catalogTypeCategoryList(birds) {
+    const categories = new Map();
+    (birds || []).forEach(function(bird) {
+      const slug = catalogTypeSlug(bird);
+      if (!categories.has(slug)) categories.set(slug, catalogTypeLabel(bird));
+    });
+    const rows = Array.from(categories.entries()).sort(function(a, b) {
+      const aIndex = catalogTypeOrder.indexOf(a[0]);
+      const bIndex = catalogTypeOrder.indexOf(b[0]);
+      if (aIndex >= 0 || bIndex >= 0) {
+        return (aIndex < 0 ? 999 : aIndex) - (bIndex < 0 ? 999 : bIndex);
+      }
+      return a[1].localeCompare(b[1]);
+    });
+    rows.unshift(['all', 'All']);
+    return rows;
+  }
+
+  function updateCatalogTypeFilters(birds) {
+    if (!catalogTypeFilters) return;
+    const categories = catalogTypeCategoryList(birds);
+    if (!categories.some(function(category) { return category[0] === catalogTypeFilter; })) {
+      catalogTypeFilter = 'all';
+    }
+    catalogTypeFilters.innerHTML = categories.map(function(category) {
+      const active = category[0] === catalogTypeFilter ? ' class="active"' : '';
+      return `<button type="button" data-catalog-filter="${escapeHtml(category[0])}"${active}>${escapeHtml(category[1])}</button>`;
+    }).join('');
   }
 
   function catalogCompareNames(a, b) {
@@ -689,6 +803,8 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     const genus = escapeHtml(bird.genus || String(bird.sci_name || '').split(' ')[0] || '');
     const rarity = escapeHtml(catalogRarityLabel(bird));
     const category = escapeHtml(catalogRaritySlug(bird));
+    const type = escapeHtml(catalogTypeLabel(bird));
+    const typeSlug = escapeHtml(catalogTypeSlug(bird));
     const plate = String(position + 1).padStart(3, '0');
     const plateLabel = position === 0 ? 'Featured' : `Plate ${plate}`;
     const search = escapeHtml(catalogSearchValue(bird));
@@ -696,8 +812,8 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
       ? `<img src="${escapeHtml(assetUrl(bird.image, bird.image_version))}" alt="${name}">`
       : `<div class="catalog-card-placeholder">${escapeHtml(initials(bird.com_name))}</div>`;
     const cardClass = position === 0 ? 'catalog-card is-featured' : 'catalog-card';
-    return `<article class="${cardClass}" data-bird-idx="${idx}" data-catalog-category="${category}" data-search-text="${search}" tabindex="0">
-      <div class="catalog-card-top"><span>${plateLabel}</span><b class="catalog-card-tag">${rarity}</b></div>
+    return `<article class="${cardClass}" data-bird-idx="${idx}" data-catalog-rarity="${category}" data-catalog-type="${typeSlug}" data-search-text="${search}" tabindex="0">
+      <div class="catalog-card-top"><span>${plateLabel}</span><div class="catalog-card-tags"><b class="catalog-card-tag">${rarity}</b><b class="catalog-card-tag catalog-card-type">${type}</b></div></div>
       <div class="catalog-card-art">${art}</div>
       <div class="catalog-card-copy">
         <h3>${name}</h3>
@@ -714,6 +830,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
 
   function renderCatalog(birds) {
     if (!catalog) return;
+    updateCatalogTypeFilters(birds);
     const entries = sortCatalogEntries((birds || []).map(function(bird, idx) {
       return {bird, idx};
     }).filter(function(entry) {
@@ -1298,15 +1415,22 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     });
   }
 
-  if (catalogFilters) {
-    catalogFilters.addEventListener('click', function(event) {
-      const button = event.target.closest('button[data-catalog-filter]');
-      if (!button) return;
-      catalogFilter = button.dataset.catalogFilter || 'all';
-      catalogFilters.querySelectorAll('button').forEach(function(filterButton) {
-        filterButton.classList.toggle('active', filterButton === button);
+  if (catalogFilters.length) {
+    catalogFilters.forEach(function(filterGroup) {
+      filterGroup.addEventListener('click', function(event) {
+        const button = event.target.closest('button[data-catalog-filter]');
+        if (!button) return;
+        const value = button.dataset.catalogFilter || 'all';
+        if (filterGroup.dataset.catalogFilterGroup === 'type') {
+          catalogTypeFilter = value;
+        } else {
+          catalogRarityFilter = value;
+        }
+        filterGroup.querySelectorAll('button').forEach(function(filterButton) {
+          filterButton.classList.toggle('active', filterButton === button);
+        });
+        renderCatalog(currentBirds);
       });
-      renderCatalog(currentBirds);
     });
   }
 

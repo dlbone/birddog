@@ -956,7 +956,7 @@ button:hover {
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) 132px;
   gap: 10px 16px;
-  align-items: center;
+  align-items: stretch;
   width: 100%;
   max-width: 1420px;
   margin: 0 auto 14px;
@@ -1022,6 +1022,29 @@ button:hover {
   align-self: center;
 }
 
+.catalog-filter-stack {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.catalog-filter-row {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.catalog-filter-row > span {
+  color: #83796a;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
 .catalog-filters button {
   min-height: 34px;
   border: 1px solid rgba(87, 71, 49, 0.22);
@@ -1050,7 +1073,7 @@ button:hover {
   overflow: auto;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-auto-rows: minmax(382px, auto);
+  grid-auto-rows: minmax(400px, auto);
   align-content: start;
   gap: 12px;
   padding: 0 2px 6px;
@@ -1099,7 +1122,7 @@ button:hover {
 
 .catalog-card-top {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
@@ -1108,6 +1131,15 @@ button:hover {
   font-size: 10px;
   letter-spacing: 1.8px;
   text-transform: uppercase;
+}
+
+.catalog-card-tags {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
 }
 
 .catalog-card-tag {
@@ -1196,6 +1228,10 @@ button:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.catalog-card-type {
+  color: #6e6253;
 }
 
 .catalog-card-copy dl {
@@ -1966,6 +2002,10 @@ button:hover {
     grid-template-columns: 1fr;
     gap: 10px;
     padding: 12px 0;
+  }
+  .catalog-filter-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
   }
   .catalog-filters {
     align-self: auto;

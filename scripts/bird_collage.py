@@ -24,6 +24,7 @@ INDEX_PATH = os.path.join(OUTPUT_DIR, "index.json")
 META_PATH = os.path.join(OUTPUT_DIR, "species_meta.json")
 STYLE_PATH = "/etc/birdnet/bird_collage_style.txt"
 KEY_PATH = "/etc/birdnet/gemini_api_key"
+METADATA_SCHEMA_VERSION = 2
 DEFAULT_STYLE = (
     "ornithological field-guide watercolor painting, full body bird, pure white background, "
     "soft natural colors, detailed feathers, no text, no border, centered subject, "
@@ -39,6 +40,73 @@ NEW_BIRD_BADGE_HOURS = 24
 _IMAGE_LIBS = None
 _LABELS_CACHE = None
 _META_CACHE = None
+
+BIRD_TYPE_LABELS = {
+    "corvids": "Corvids",
+    "songbirds": "Songbirds",
+    "woodpeckers": "Woodpeckers",
+    "raptors": "Raptors",
+    "owls": "Owls",
+    "waterfowl": "Waterfowl",
+    "shorebirds": "Shorebirds",
+    "waders": "Waders",
+    "rails": "Rails",
+    "doves": "Doves",
+    "hummingbirds": "Hummingbirds",
+    "gamebirds": "Game Birds",
+    "nightbirds": "Night Birds",
+    "cuckoos": "Cuckoos",
+    "kingfishers": "Kingfishers",
+    "parrots": "Parrots",
+    "unclassified": "Unclassified",
+}
+BIRD_TYPE_BY_FAMILY = {
+    "Corvidae": "corvids",
+    "Picidae": "woodpeckers",
+    "Accipitridae": "raptors",
+    "Falconidae": "raptors",
+    "Cathartidae": "raptors",
+    "Pandionidae": "raptors",
+    "Strigidae": "owls",
+    "Tytonidae": "owls",
+    "Anatidae": "waterfowl",
+    "Laridae": "shorebirds",
+    "Scolopacidae": "shorebirds",
+    "Charadriidae": "shorebirds",
+    "Ardeidae": "waders",
+    "Threskiornithidae": "waders",
+    "Rallidae": "rails",
+    "Columbidae": "doves",
+    "Trochilidae": "hummingbirds",
+    "Phasianidae": "gamebirds",
+    "Odontophoridae": "gamebirds",
+    "Caprimulgidae": "nightbirds",
+    "Cuculidae": "cuckoos",
+    "Alcedinidae": "kingfishers",
+    "Psittacidae": "parrots",
+}
+BIRD_TYPE_BY_ORDER = {
+    "Passeriformes": "songbirds",
+    "Piciformes": "woodpeckers",
+    "Accipitriformes": "raptors",
+    "Falconiformes": "raptors",
+    "Cathartiformes": "raptors",
+    "Strigiformes": "owls",
+    "Anseriformes": "waterfowl",
+    "Charadriiformes": "shorebirds",
+    "Pelecaniformes": "waders",
+    "Ciconiiformes": "waders",
+    "Gruiformes": "rails",
+    "Columbiformes": "doves",
+    "Apodiformes": "hummingbirds",
+    "Galliformes": "gamebirds",
+    "Caprimulgiformes": "nightbirds",
+    "Cuculiformes": "cuckoos",
+    "Coraciiformes": "kingfishers",
+    "Psittaciformes": "parrots",
+}
+WIKIDATA_TAXON_RANK_FAMILY = "Q35409"
+WIKIDATA_TAXON_RANK_ORDER = "Q36602"
 
 
 def image_libs():
@@ -312,9 +380,96 @@ def get_species(hours, limit, conn=None, labels=None, recordings_cache=None):
     return species
 
 
+def wikidata_claim_entity_id(entity, property_id):
+    claims = entity.get("claims", {}).get(property_id, [])
+    for claim in claims:
+        value = claim.get("mainsnak", {}).get("datavalue", {}).get("value", {})
+        if isinstance(value, dict) and value.get("id"):
+            return value["id"]
+    return ""
+
+
+def wikidata_label(entity):
+    labels = entity.get("labels", {})
+    return (
+        labels.get("en", {}).get("value")
+        or labels.get("mul", {}).get("value")
+        or ""
+    )
+
+
+def fetch_wikidata_entity(entity_id, entity_cache):
+    if not entity_id:
+        return {}
+    if entity_id in entity_cache:
+        return entity_cache[entity_id]
+    request = urllib.request.Request(
+        f"https://www.wikidata.org/wiki/Special:EntityData/{urllib.parse.quote(entity_id)}.json",
+        headers={"User-Agent": "BirdNET-Pi collage metadata"},
+    )
+    with urllib.request.urlopen(request, timeout=15) as response:
+        data = json.loads(response.read().decode("utf-8"))
+    entity = data.get("entities", {}).get(entity_id, {})
+    entity_cache[entity_id] = entity
+    return entity
+
+
+def classify_bird_type(family, order):
+    slug = BIRD_TYPE_BY_FAMILY.get(family) or BIRD_TYPE_BY_ORDER.get(order) or "unclassified"
+    return slug, BIRD_TYPE_LABELS.get(slug, BIRD_TYPE_LABELS["unclassified"])
+
+
+def fetch_wikidata_taxonomy(wikidata_id):
+    entity_cache = {}
+    family = ""
+    order = ""
+    lineage = []
+    current_id = wikidata_id
+    seen = set()
+    for _ in range(18):
+        if not current_id or current_id in seen:
+            break
+        seen.add(current_id)
+        entity = fetch_wikidata_entity(current_id, entity_cache)
+        if not entity:
+            break
+        label = wikidata_label(entity)
+        rank_id = wikidata_claim_entity_id(entity, "P105")
+        if label:
+            lineage.append(label)
+        if rank_id == WIKIDATA_TAXON_RANK_FAMILY and not family:
+            family = label
+        if rank_id == WIKIDATA_TAXON_RANK_ORDER and not order:
+            order = label
+        current_id = wikidata_claim_entity_id(entity, "P171")
+
+    bird_type_slug, bird_type = classify_bird_type(family, order)
+    return {
+        "family": family,
+        "order": order,
+        "bird_type_slug": bird_type_slug,
+        "bird_type": bird_type,
+        "taxonomy_lineage": lineage,
+        "taxonomy_source": "Wikidata" if lineage else "",
+    }
+
+
 def fetch_wikipedia_summary(sci_name, com_name):
     titles = [sci_name, com_name]
     headers = {"User-Agent": "BirdNET-Pi collage metadata"}
+    metadata = {
+        "description": "",
+        "source_url": "",
+        "source": "",
+        "wikidata_id": "",
+        "family": "",
+        "order": "",
+        "bird_type_slug": "unclassified",
+        "bird_type": BIRD_TYPE_LABELS["unclassified"],
+        "taxonomy_lineage": [],
+        "taxonomy_source": "",
+        "metadata_schema": METADATA_SCHEMA_VERSION,
+    }
     for title in titles:
         if not title:
             continue
@@ -329,17 +484,26 @@ def fetch_wikipedia_summary(sci_name, com_name):
         except Exception:
             continue
         extract = data.get("extract", "").strip()
-        if extract:
-            return {
+        wikidata_id = data.get("wikibase_item", "")
+        if extract or wikidata_id:
+            metadata.update({
                 "description": extract,
                 "source_url": data.get("content_urls", {}).get("desktop", {}).get("page", ""),
-                "source": "Wikipedia",
-            }
-    return {
-        "description": "",
-        "source_url": "",
-        "source": "",
-    }
+                "source": "Wikipedia" if extract else "",
+                "wikidata_id": wikidata_id,
+            })
+            if wikidata_id:
+                try:
+                    metadata.update(fetch_wikidata_taxonomy(wikidata_id))
+                except Exception:
+                    pass
+            return metadata
+    return metadata
+
+
+def cached_bird_type(cached):
+    slug = cached.get("bird_type_slug") or "unclassified"
+    return slug, cached.get("bird_type") or BIRD_TYPE_LABELS.get(slug, BIRD_TYPE_LABELS["unclassified"])
 
 
 def enrich_metadata(species, fetch_missing=True):
@@ -355,8 +519,10 @@ def enrich_metadata(species, fetch_missing=True):
         should_fetch = (
             fetch_missing
             and (
-                "description" not in cached
+                cached.get("metadata_schema") != METADATA_SCHEMA_VERSION
+                or "description" not in cached
                 or (not cached.get("description") and checked_at < retry_before)
+                or not cached.get("bird_type_slug")
             )
         )
         if should_fetch:
@@ -364,12 +530,18 @@ def enrich_metadata(species, fetch_missing=True):
             cached["date_created"] = today
             changed = True
         genus = sci_name.split(" ", 1)[0] if sci_name else ""
+        bird_type_slug, bird_type = cached_bird_type(cached)
         bird["description"] = cached.get("description", "")
         bird["description_source"] = cached.get("source", "")
         bird["description_url"] = cached.get("source_url", "")
         bird["genus"] = cached.get("genus") or genus
+        bird["family"] = cached.get("family", "")
+        bird["order"] = cached.get("order", "")
+        bird["bird_type_slug"] = bird_type_slug
+        bird["bird_type"] = bird_type
         bird["rarity"] = local_rarity(bird.get("total_count"))
         cached["genus"] = bird["genus"]
+        cached["metadata_schema"] = METADATA_SCHEMA_VERSION
         cache[sci_name] = cached
     if changed:
         tmp_path = f"{META_PATH}.tmp"
@@ -725,15 +897,17 @@ def bird_image_present(bird, variant):
 
 
 def metadata_lookup_pending(bird, meta_cache=None):
-    if bird.get("description"):
+    if bird.get("description") and bird.get("bird_type_slug"):
         return False
     cache = meta_cache if meta_cache is not None else load_meta_cache()
     cached = cache.get(bird.get("sci_name", ""), {})
-    if cached.get("description"):
+    schema_current = cached.get("metadata_schema") == METADATA_SCHEMA_VERSION
+    has_type = bool(cached.get("bird_type_slug"))
+    if schema_current and cached.get("description") and has_type:
         return False
     checked_at = cached.get("date_created", "")
     retry_before = (dt.date.today() - dt.timedelta(days=7)).isoformat()
-    if "description" in cached and checked_at >= retry_before:
+    if schema_current and "description" in cached and has_type and checked_at >= retry_before:
         return False
     return True
 
