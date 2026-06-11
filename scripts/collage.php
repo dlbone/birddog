@@ -313,7 +313,6 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           $name = htmlspecialchars($bird['com_name'] ?? 'Unknown bird');
           $sci = htmlspecialchars($bird['sci_name'] ?? '');
           $total = intval($bird['total_count'] ?? $bird['recent_count'] ?? 0);
-          $today = intval($bird['today_count'] ?? 0);
           $sci_name_text = strval($bird['sci_name'] ?? '');
           $genus_text = strval($bird['genus'] ?? '');
           if ($genus_text === '' && $sci_name_text !== '') {
@@ -326,8 +325,10 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           $last_heard = htmlspecialchars($bird['last_heard'] ?? '');
           $first_heard = htmlspecialchars($bird['first_heard'] ?? '');
           $plate = str_pad(strval($idx + 1), 3, '0', STR_PAD_LEFT);
-          echo '<article class="catalog-card" data-bird-idx="' . intval($idx) . '" data-catalog-category="' . $category_slug . '" data-search-text="' . $search_text . '" tabindex="0">';
-          echo '<div class="catalog-card-top"><span>Plate ' . htmlspecialchars($plate) . '</span><b class="catalog-card-tag">' . $category_label . '</b></div>';
+          $plate_label = $idx === 0 ? 'Featured' : 'Plate ' . $plate;
+          $card_class = $idx === 0 ? 'catalog-card is-featured' : 'catalog-card';
+          echo '<article class="' . $card_class . '" data-bird-idx="' . intval($idx) . '" data-catalog-category="' . $category_slug . '" data-search-text="' . $search_text . '" tabindex="0">';
+          echo '<div class="catalog-card-top"><span>' . htmlspecialchars($plate_label) . '</span><b class="catalog-card-tag">' . $category_label . '</b></div>';
           echo '<div class="catalog-card-art">';
           if (!empty($bird['has_image'])) {
             $version = $bird['image_version'] ?? ($payload['payload_sig'] ?? '');
@@ -340,7 +341,6 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
           echo '<div class="catalog-card-copy"><h3>' . $name . '</h3><i>' . $sci . '</i><dl>';
           echo '<dt>Genus</dt><dd>' . $genus . '</dd>';
           echo '<dt>Detections</dt><dd>' . number_format($total) . '</dd>';
-          echo '<dt>Today</dt><dd>' . number_format($today) . '</dd>';
           echo '<dt>First heard</dt><dd><b class="js-relative-date" data-date-value="' . $first_heard . '">' . ($first_heard ?: 'unknown') . '</b></dd>';
           echo '<dt>Last heard</dt><dd><b class="js-relative-date" data-date-value="' . $last_heard . '">' . ($last_heard ?: 'unknown') . '</b></dd>';
           echo '</dl></div></article>';
@@ -687,17 +687,18 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     const name = escapeHtml(bird.com_name || 'Unknown bird');
     const sci = escapeHtml(bird.sci_name || '');
     const total = Number(bird.total_count || bird.recent_count || 0);
-    const today = Number(bird.today_count || 0);
     const genus = escapeHtml(bird.genus || String(bird.sci_name || '').split(' ')[0] || '');
     const rarity = escapeHtml(catalogRarityLabel(bird));
     const category = escapeHtml(catalogRaritySlug(bird));
     const plate = String(position + 1).padStart(3, '0');
+    const plateLabel = position === 0 ? 'Featured' : `Plate ${plate}`;
     const search = escapeHtml(catalogSearchValue(bird));
     const art = bird.has_image
       ? `<img src="${escapeHtml(assetUrl(bird.image, bird.image_version))}" alt="${name}">`
       : `<div class="catalog-card-placeholder">${escapeHtml(initials(bird.com_name))}</div>`;
-    return `<article class="catalog-card" data-bird-idx="${idx}" data-catalog-category="${category}" data-search-text="${search}" tabindex="0">
-      <div class="catalog-card-top"><span>Plate ${plate}</span><b class="catalog-card-tag">${rarity}</b></div>
+    const cardClass = position === 0 ? 'catalog-card is-featured' : 'catalog-card';
+    return `<article class="${cardClass}" data-bird-idx="${idx}" data-catalog-category="${category}" data-search-text="${search}" tabindex="0">
+      <div class="catalog-card-top"><span>${plateLabel}</span><b class="catalog-card-tag">${rarity}</b></div>
       <div class="catalog-card-art">${art}</div>
       <div class="catalog-card-copy">
         <h3>${name}</h3>
@@ -705,7 +706,6 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
         <dl>
           <dt>Genus</dt><dd>${genus}</dd>
           <dt>Detections</dt><dd>${total.toLocaleString()}</dd>
-          <dt>Today</dt><dd>${today.toLocaleString()}</dd>
           <dt>First heard</dt><dd>${relativeDateHtml(firstHeardValue(bird))}</dd>
           <dt>Last heard</dt><dd>${relativeDateHtml(bird.last_heard || '')}</dd>
         </dl>
