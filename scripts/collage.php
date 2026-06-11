@@ -454,6 +454,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
   let catalogSortMode = 'az';
   const emptyDefaultText = empty ? empty.textContent : '';
   const refreshIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5"></path><path d="M4 18v-5h5"></path><path d="M18.5 9A7 7 0 0 0 6.1 6.1L4 8"></path><path d="M5.5 15a7 7 0 0 0 12.4 2.9L20 16"></path></svg>';
+  const downloadIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="90" height="90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>';
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, function(char) {
@@ -530,13 +531,11 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
     const name = escapeHtml(bird.com_name);
     const sci = escapeHtml(bird.sci_name);
     const heard = Number(bird.recent_count || 0);
-    const isNew = bird.is_new_bird ? ' is-new-bird' : '';
-    const badge = !isNewMode && bird.is_new_bird ? '<span class="new-bird-badge">New</span>' : '';
     if (bird.has_image) {
       const src = escapeHtml(assetUrl(bird.image, bird.image_version));
-      return `<figure class="collage-bird${isNew}" data-bird-idx="${idx}" tabindex="0">${badge}<img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
+      return `<figure class="collage-bird" data-bird-idx="${idx}" tabindex="0"><img src="${src}" alt="${name}"><figcaption><b>${name}</b><i>${sci}</i><span>${heard} heard</span></figcaption></figure>`;
     }
-    return `<figure class="collage-bird${isNew} collage-placeholder" data-bird-idx="${idx}" tabindex="0">${badge}<div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
+    return `<figure class="collage-bird collage-placeholder" data-bird-idx="${idx}" tabindex="0"><div>${escapeHtml(initials(bird.com_name))}</div><figcaption><b>${name}</b><i>${sci}</i><span>image queued</span></figcaption></figure>`;
   }
 
   function recentListMarkup(birds) {
@@ -750,7 +749,7 @@ $silhouette_pack_version = file_exists($silhouette_pack_path) ? filemtime($silho
         <canvas class="bird-modal-viz" width="320" height="34" data-audio="${escapeHtml(audioPath)}" aria-hidden="true"></canvas>
       </div>
       <strong>${confidence}%</strong>
-      <a class="bird-modal-download" href="${escapeHtml(audioPath)}" download>mp3</a>
+      <a class="bird-modal-download" href="${escapeHtml(audioPath)}" download aria-label="Download MP3">${downloadIcon}</a>
     </div>`;
   }
 
