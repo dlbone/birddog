@@ -1159,12 +1159,12 @@ button:hover {
 }
 
 .catalog-card {
-  min-height: 382px;
+  min-height: 400px;
   display: grid;
-  grid-template-rows: auto 164px minmax(0, auto);
+  grid-template-rows: auto 164px auto;
   gap: 10px;
   margin: 0;
-  padding: 12px 12px 18px;
+  padding: 12px 12px 20px;
   border: 1px solid rgba(87, 71, 49, 0.20);
   border-radius: 4px;
   background:
@@ -1176,16 +1176,16 @@ button:hover {
   cursor: pointer;
   color: #2b2820;
   outline: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .catalog-card.is-featured {
   grid-column: span 2;
-  min-height: 382px;
+  min-height: 400px;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   column-gap: 20px;
-  padding: 16px 16px 22px;
+  padding: 16px 16px 24px;
 }
 
 .catalog-card:hover,
@@ -1285,10 +1285,7 @@ button:hover {
   font-weight: 400;
   line-height: 1.05;
   min-height: 2.1em;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .catalog-card.is-featured .catalog-card-copy h3 {
@@ -1302,9 +1299,7 @@ button:hover {
   font-size: 13px;
   line-height: 1.25;
   min-height: 1.25em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .catalog-card-type {
@@ -1341,9 +1336,7 @@ button:hover {
   color: #352f27;
   font-size: 12px;
   font-weight: 400;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .catalog-empty {
