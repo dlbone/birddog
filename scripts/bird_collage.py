@@ -24,7 +24,7 @@ INDEX_PATH = os.path.join(OUTPUT_DIR, "index.json")
 META_PATH = os.path.join(OUTPUT_DIR, "species_meta.json")
 STYLE_PATH = "/etc/birdnet/bird_collage_style.txt"
 KEY_PATH = "/etc/birdnet/gemini_api_key"
-METADATA_SCHEMA_VERSION = 2
+METADATA_SCHEMA_VERSION = 3
 DEFAULT_STYLE = (
     "ornithological field-guide watercolor painting, full body bird, pure white background, "
     "soft natural colors, detailed feathers, no text, no border, centered subject, "
@@ -63,6 +63,7 @@ BIRD_TYPE_LABELS = {
 BIRD_TYPE_BY_FAMILY = {
     "Corvidae": "corvids",
     "Picidae": "woodpeckers",
+    "Aegithalidae": "songbirds",
     "Accipitridae": "raptors",
     "Falconidae": "raptors",
     "Cathartidae": "raptors",
@@ -84,6 +85,31 @@ BIRD_TYPE_BY_FAMILY = {
     "Cuculidae": "cuckoos",
     "Alcedinidae": "kingfishers",
     "Psittacidae": "parrots",
+    "Bombycillidae": "songbirds",
+    "Calcariidae": "songbirds",
+    "Cardinalidae": "songbirds",
+    "Certhiidae": "songbirds",
+    "Cinclidae": "songbirds",
+    "Emberizidae": "songbirds",
+    "Fringillidae": "songbirds",
+    "Hirundinidae": "songbirds",
+    "Icteridae": "songbirds",
+    "Laniidae": "songbirds",
+    "Mimidae": "songbirds",
+    "Motacillidae": "songbirds",
+    "Paridae": "songbirds",
+    "Parulidae": "songbirds",
+    "Passerellidae": "songbirds",
+    "Passeridae": "songbirds",
+    "Polioptilidae": "songbirds",
+    "Regulidae": "songbirds",
+    "Sittidae": "songbirds",
+    "Sturnidae": "songbirds",
+    "Thraupidae": "songbirds",
+    "Troglodytidae": "songbirds",
+    "Turdidae": "songbirds",
+    "Tyrannidae": "songbirds",
+    "Vireonidae": "songbirds",
 }
 BIRD_TYPE_BY_ORDER = {
     "Passeriformes": "songbirds",
@@ -419,6 +445,10 @@ def classify_bird_type(family, order):
     return slug, BIRD_TYPE_LABELS.get(slug, BIRD_TYPE_LABELS["unclassified"])
 
 
+def bird_type_is_classified(slug):
+    return bool(slug) and slug != "unclassified"
+
+
 def fetch_wikidata_taxonomy(wikidata_id):
     entity_cache = {}
     family = ""
@@ -502,8 +532,28 @@ def fetch_wikipedia_summary(sci_name, com_name):
 
 
 def cached_bird_type(cached):
+    family = cached.get("family", "")
+    order = cached.get("order", "")
+    slug, label = classify_bird_type(family, order)
+    if bird_type_is_classified(slug):
+        return slug, label
     slug = cached.get("bird_type_slug") or "unclassified"
     return slug, cached.get("bird_type") or BIRD_TYPE_LABELS.get(slug, BIRD_TYPE_LABELS["unclassified"])
+
+
+def cached_metadata_needs_lookup(cached, retry_before):
+    schema_current = cached.get("metadata_schema") == METADATA_SCHEMA_VERSION
+    checked_at = cached.get("date_created", "")
+    bird_type_slug, _ = cached_bird_type(cached)
+    description_stale = (
+        "description" not in cached
+        or (not cached.get("description") and checked_at < retry_before)
+    )
+    type_stale = (
+        not bird_type_is_classified(bird_type_slug)
+        and (not schema_current or checked_at < retry_before)
+    )
+    return description_stale or type_stale
 
 
 def enrich_metadata(species, fetch_missing=True):
@@ -515,20 +565,13 @@ def enrich_metadata(species, fetch_missing=True):
     for bird in species:
         sci_name = bird.get("sci_name", "")
         cached = cache.get(sci_name, {})
-        checked_at = cached.get("date_created", "")
-        should_fetch = (
-            fetch_missing
-            and (
-                cached.get("metadata_schema") != METADATA_SCHEMA_VERSION
-                or "description" not in cached
-                or (not cached.get("description") and checked_at < retry_before)
-                or not cached.get("bird_type_slug")
-            )
-        )
+        metadata_needs_lookup = cached_metadata_needs_lookup(cached, retry_before)
+        should_fetch = fetch_missing and metadata_needs_lookup
         if should_fetch:
             cached = fetch_wikipedia_summary(sci_name, bird.get("com_name", ""))
             cached["date_created"] = today
             changed = True
+            metadata_needs_lookup = cached_metadata_needs_lookup(cached, retry_before)
         genus = sci_name.split(" ", 1)[0] if sci_name else ""
         bird_type_slug, bird_type = cached_bird_type(cached)
         bird["description"] = cached.get("description", "")
@@ -540,9 +583,20 @@ def enrich_metadata(species, fetch_missing=True):
         bird["bird_type_slug"] = bird_type_slug
         bird["bird_type"] = bird_type
         bird["rarity"] = local_rarity(bird.get("total_count"))
-        cached["genus"] = bird["genus"]
-        cached["metadata_schema"] = METADATA_SCHEMA_VERSION
-        cache[sci_name] = cached
+        if cached or not metadata_needs_lookup:
+            if cached.get("genus") != bird["genus"]:
+                cached["genus"] = bird["genus"]
+                changed = True
+            if cached.get("bird_type_slug") != bird_type_slug or cached.get("bird_type") != bird_type:
+                cached["bird_type_slug"] = bird_type_slug
+                cached["bird_type"] = bird_type
+                changed = True
+            if not metadata_needs_lookup and cached.get("metadata_schema") != METADATA_SCHEMA_VERSION:
+                cached["metadata_schema"] = METADATA_SCHEMA_VERSION
+                changed = True
+            cache[sci_name] = cached
+        bird["metadata_schema"] = cached.get("metadata_schema", 0)
+        bird["metadata_checked_at"] = cached.get("date_created", "")
     if changed:
         tmp_path = f"{META_PATH}.tmp"
         with open(tmp_path, "w", encoding="utf-8") as handle:
@@ -897,19 +951,22 @@ def bird_image_present(bird, variant):
 
 
 def metadata_lookup_pending(bird, meta_cache=None):
-    if bird.get("description") and bird.get("bird_type_slug"):
-        return False
     cache = meta_cache if meta_cache is not None else load_meta_cache()
     cached = cache.get(bird.get("sci_name", ""), {})
-    schema_current = cached.get("metadata_schema") == METADATA_SCHEMA_VERSION
-    has_type = bool(cached.get("bird_type_slug"))
-    if schema_current and cached.get("description") and has_type:
-        return False
-    checked_at = cached.get("date_created", "")
+    if not cached:
+        return not (
+            bird.get("description")
+            and bird_type_is_classified(bird.get("bird_type_slug"))
+        )
     retry_before = (dt.date.today() - dt.timedelta(days=7)).isoformat()
-    if schema_current and "description" in cached and has_type and checked_at >= retry_before:
-        return False
-    return True
+    bird_type_slug, _ = cached_bird_type(cached)
+    if cached.get("description") and bird.get("description") != cached.get("description"):
+        return True
+    if bird_type_slug != (bird.get("bird_type_slug") or "unclassified"):
+        return True
+    if cached_metadata_needs_lookup(cached, retry_before):
+        return True
+    return False
 
 
 def index_has_pending_work(payload, args):

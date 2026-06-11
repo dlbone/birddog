@@ -43,6 +43,7 @@ $index_ttl = 300;
 $all_index_ttl = 900;
 $db_refresh_grace = 45;
 $collage_index_schema = 4;
+define('COLLAGE_METADATA_SCHEMA', 3);
 
 if (!file_exists(dirname($index_path))) {
   mkdir(dirname($index_path), 0775, true);
@@ -218,7 +219,13 @@ function collage_needs_generated_images($payload) {
 function collage_needs_metadata($payload) {
   if (empty($payload['species']) || !is_array($payload['species'])) return false;
   foreach ($payload['species'] as $bird) {
-    if (empty($bird['description']) || empty($bird['bird_type_slug'])) return true;
+    $bird_type_slug = strtolower(trim(strval($bird['bird_type_slug'] ?? '')));
+    $metadata_schema = intval($bird['metadata_schema'] ?? 0);
+    $checked_at = trim(strval($bird['metadata_checked_at'] ?? ''));
+    $retry_due = $checked_at === '' || strtotime($checked_at) < strtotime('-7 days');
+    if ($bird_type_slug === '') return true;
+    if (empty($bird['description']) && ($metadata_schema < COLLAGE_METADATA_SCHEMA || $retry_due)) return true;
+    if ($bird_type_slug === 'unclassified' && ($metadata_schema < COLLAGE_METADATA_SCHEMA || $retry_due)) return true;
   }
   return false;
 }
